@@ -1,10 +1,9 @@
 /* Simple cache-first SW for GitHub Pages */
-const CACHE_NAME = "hedo-lockers-v1";
+const CACHE_NAME = "hedo-lockers-v2";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  // Icons (assure-toi qu'ils existent)
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
@@ -23,8 +22,9 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  // Stratégie réseau-d'abord pour index (mise à jour) ; cache-d'abord pour le reste
-  if (new URL(req.url).pathname.endsWith("/") || new URL(req.url).pathname.endsWith("/index.html")) {
+  const url = new URL(req.url);
+  // réseau-d'abord pour index (mise à jour), cache-d'abord pour le reste
+  if (url.pathname.endsWith("/") || url.pathname.endsWith("/index.html")) {
     e.respondWith(
       fetch(req).then((res) => {
         const copy = res.clone();
