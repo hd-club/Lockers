@@ -4,38 +4,66 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Hedo – Casier (RFID/QR) – Kiosk + Admin</title>
+
+<!-- ZXing (fallback robuste iOS/Safari) -->
+<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+
 <style>
-:root{--bg:#0d0f13;--panel:#141821;--text:#e9eef6;--muted:#9aa4b2;--accent:#D4AF37;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;--border:rgba(255,255,255,.12)}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+:root{
+  --bg:#0d0f13;--panel:#141821;--text:#e9eef6;--muted:#9aa4b2;
+  --accent:#D4AF37;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;
+  --border:rgba(255,255,255,.12)
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
 .wrap{min-height:100vh;display:flex;flex-direction:column}
 header{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .title{font-weight:700;letter-spacing:.3px}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
-.btn,.input,.select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px}
-.btn{cursor:pointer}.btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.btn,.input,.select,textarea{
+  background:var(--panel);border:1px solid var(--border);color:var(--text);
+  padding:10px 12px;border-radius:10px
+}
+.btn{cursor:pointer}
+.btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 main{padding:18px;display:grid;grid-template-columns:1fr;gap:18px;flex:1}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
-h3{margin:0 0 10px 0}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+h3{margin:0 0 10px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .note{font-size:12px;color:var(--muted)}
 .kiosk{display:flex;align-items:center;justify-content:center;min-height:240px;border:2px dashed var(--border);border-radius:12px;text-align:center}
 .big{font-size:64px;font-weight:800;letter-spacing:1px;color:var(--accent)}
-.muted{color:var(--muted)} .hidden{position:absolute;left:-9999px;top:-9999px;opacity:0}
+.muted{color:var(--muted)}
+.hidden{position:absolute;left:-9999px;top:-9999px;opacity:0}
 .grid{width:100%;border-collapse:collapse;margin-top:10px}
 .grid th,.grid td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
 textarea{width:100%;min-height:140px}
 footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
 @media (min-width:1100px){main{grid-template-columns:1.1fr .9fr}}
+
 .cam-status{display:flex;align-items:center;gap:8px}
-.dot{width:10px;height:10px;border-radius:50%}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.err{background:var(--danger)}
-.fab{position:fixed;right:16px;bottom:16px;z-index:50;background:var(--accent);color:#000;border:none;border-radius:999px;padding:14px 16px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.fab.alt{background:var(--panel);color:var(--text);border:1px solid var(--border)}
-@media (min-width:900px){.fab{display:none}}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--danger)}
+
+/* Bouton flottant mobile pour (dé)marre la caméra */
+.fab{
+  position:fixed; right:16px; bottom:16px; z-index:50;
+  background:var(--accent); color:#000; border:none;
+  border-radius:999px; padding:14px 16px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.fab.alt{ background:var(--panel); color:var(--text); border:1px solid var(--border) }
+@media (min-width:900px){ .fab{ display:none } }
+
+/* Vidéo quasi-invisible mais active (meilleur pour iOS/Safari) */
+#qr-video{
+  width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:-9999px
+}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="title">Hedo – Casier (RFID 125 kHz / QR)</div>
+    <div class="title">Hedo – Lockers</div>
     <div class="tabs">
       <button class="btn accent" id="tab-kiosk">Kiosk</button>
       <button class="btn" id="tab-admin">Admin</button>
@@ -44,21 +72,22 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
     </div>
     <div class="cam-status">
       <span class="dot warn" id="cam-dot" title="État caméra"></span>
-      <span id="cam-label" class="note">Caméra : init…</span>
+      <span id="cam-label" class="note">Caméra : arrêtée</span>
       <button class="btn" id="cam-restart" title="Relancer la capture">Relancer</button>
     </div>
   </header>
 
   <main>
+    <!-- KIOSK -->
     <section class="panel" id="view-kiosk">
       <h3>Écran client</h3>
       <div class="note">
         La <b>douchette USB</b> (RFID/QR en mode clavier) est capturée en permanence.
-        Le <b>scan QR via caméra</b> s’active avec le bouton 📷 (flux non affiché).
+        La <b>caméra</b> pour lire les QR s’active via le bouton 📷. La preview reste cachée.
       </div>
 
       <input id="hidden-capture" class="hidden" aria-hidden="true" />
-      <video id="qr-video" class="hidden" muted playsinline></video>
+      <video id="qr-video" muted playsinline></video>
       <canvas id="qr-canvas" class="hidden"></canvas>
 
       <div class="kiosk" id="kiosk-box" style="margin-top:12px">
@@ -67,20 +96,24 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
       <div id="kiosk-error" class="note" style="color:var(--danger);margin-top:8px"></div>
     </section>
 
+    <!-- ADMIN -->
     <section class="panel" id="view-admin" style="display:none">
       <h3>Administration — Mapping UID ↔ Casier</h3>
       <div class="row">
-        <input class="input" id="search" placeholder="Rechercher (casier, UID)…" />
+        <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
         <button class="btn" id="add-row">Ajouter une ligne</button>
         <button class="btn" id="gen-sample">Générer casiers 101–160 (VIDES)</button>
       </div>
       <table class="grid" id="map-table">
-        <thead><tr><th># Casier</th><th>UID (lecture seule 125 kHz ou contenu QR)</th><th>Actions</th></tr></thead>
+        <thead>
+          <tr><th># Casier</th><th>UID (lecture seule 125 kHz ou contenu QR)</th><th>Actions</th></tr>
+        </thead>
         <tbody id="map-body"></tbody>
       </table>
-      <div class="note" style="margin-top:8px">Astuce : “Scanner ici” dans une ligne capte le prochain scan clavier.</div>
+      <div class="note" style="margin-top:8px">Astuce : “Scanner ici” capte le prochain scan clavier dans la ligne.</div>
     </section>
 
+    <!-- TOOLS -->
     <section class="panel" id="view-tools" style="display:none">
       <h3>Import / Export</h3>
       <div class="row">
@@ -88,159 +121,396 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
         <button class="btn" id="btn-export-csv">Exporter CSV</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <textarea id="import-area" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV locker,uid'></textarea>
+        <textarea id="import-area" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV "locker,uid"'></textarea>
       </div>
       <div class="row">
         <button class="btn" id="btn-import-json">Importer JSON</button>
         <button class="btn" id="btn-import-csv">Importer CSV</button>
       </div>
-      <div class="note" style="margin-top:8px">Les données sont stockées en local (localStorage). Tu pourras brancher une API plus tard.</div>
+      <div class="note" style="margin-top:8px">Les données sont stockées dans ce navigateur (localStorage). Tu pourras brancher une API plus tard.</div>
     </section>
   </main>
 
   <footer>Hedo — aucune donnée nominative ; uniquement la correspondance UID ↔ numéro de casier.</footer>
 </div>
 
+<!-- Bouton flottant mobile/desktop pour (dé)marre caméra -->
 <button id="fab-camera" class="fab" aria-pressed="false" aria-label="Activer la caméra">📷 Activer caméra</button>
 
-<!-- ZXing fallback (chargé à la demande si nécessaire) -->
-<script id="zxing-script" defer src="" data-loaded="false"></script>
-
 <script>
-/* ====== Storage ====== */
-const LS_KEY="hedo_map_v4";
-function loadState(){const raw=localStorage.getItem(LS_KEY);if(raw)try{return JSON.parse(raw)}catch{}const init={map:[],lastScan:null};localStorage.setItem(LS_KEY,JSON.stringify(init));return init;}
-function saveState(s){localStorage.setItem(LS_KEY,JSON.stringify(s));}
-let state=loadState();
+/* =========================
+   Stockage local
+========================= */
+const LS_KEY = "hedo_map_v5";
+function loadState(){
+  const raw = localStorage.getItem(LS_KEY);
+  if (raw) { try { return JSON.parse(raw) } catch(e){} }
+  const init = { map: [], lastScan: null };
+  localStorage.setItem(LS_KEY, JSON.stringify(init));
+  return init;
+}
+function saveState(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+let state = loadState();
 
-/* ====== Helpers ====== */
-function normalizeToken(s){if(!s)return"";let str=String(s).trim().replace(/[\r\n\t]/g,"");if(str.length>=5)return str;const hex=(str.match(/[0-9A-Fa-f]{6,}/)||[null])[0];if(hex)return hex.toUpperCase();const dec=(str.match(/[0-9]{6,}/)||[null])[0];if(dec)return dec;return str;}
-function findLockerByUID(uid){const n=normalizeToken(uid);return state.map.find(r=>(r.uid||"")===n)||null;}
-function findByLocker(locker){const L=Number(locker);return state.map.find(r=>r.locker===L)||null;}
-function upsertRow(locker,uid){const L=Number(locker);const n=normalizeToken(uid);let row=findByLocker(L);if(row){row.uid=n}else{state.map.push({locker:L,uid:n})}saveState(state);}
-function deleteRow(locker){const L=Number(locker);state.map=state.map.filter(r=>r.locker!==L);saveState(state);}
-
-/* ====== Navigation ====== */
-const viewKiosk=document.getElementById("view-kiosk");
-const viewAdmin=document.getElementById("view-admin");
-const viewTools=document.getElementById("view-tools");
-const tabKiosk=document.getElementById("tab-kiosk");
-const tabAdmin=document.getElementById("tab-admin");
-const tabTools=document.getElementById("tab-tools");
-function setTab(name){viewKiosk.style.display=(name==="kiosk")?"block":"none";viewAdmin.style.display=(name==="admin")?"block":"none";viewTools.style.display=(name==="tools")?"block":"none";tabKiosk.classList.toggle("accent",name==="kiosk");tabAdmin.classList.toggle("accent",name==="admin");tabTools.classList.toggle("accent",name==="tools");}
-tabKiosk.onclick=()=>setTab("kiosk");tabAdmin.onclick=()=>{setTab("admin");renderTable();};tabTools.onclick=()=>setTab("tools");setTab("kiosk");
-
-/* ====== Kiosk (clavier) ====== */
-const hiddenInput=document.getElementById("hidden-capture");
-const kioskContent=document.getElementById("kiosk-content");
-const kioskError=document.getElementById("kiosk-error");
-const kioskBox=document.getElementById("kiosk-box");
-let buffer="";
-function showLocker(locker){kioskError.textContent="";kioskContent.innerHTML=locker?'<div class="muted">Votre casier est le</div><div class="big">#'+locker+'</div>':'<span class="muted">Aucun casier trouvé pour cet identifiant.</span>';}
-function handleScan(raw){const token=normalizeToken(raw);if(!token||token.length<5)return;state.lastScan=token;saveState(state);const row=findLockerByUID(token);showLocker(row?row.locker:null);}
-function focusCapture(){hiddenInput.focus();}
-hiddenInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const data=buffer;buffer="";handleScan(data);}else if(e.key.length===1){buffer+=e.key;}else if(e.key==="Backspace"){buffer=buffer.slice(0,-1);}});
-kioskBox.addEventListener("click",focusCapture);document.addEventListener("click",e=>{if(viewKiosk.contains(e.target))setTimeout(focusCapture,0);});focusCapture();
-
-/* ====== Caméra : BarcodeDetector OU ZXing fallback ====== */
-const video=document.getElementById("qr-video"), canvas=document.getElementById("qr-canvas");
-const camDot=document.getElementById("cam-dot"), camLabel=document.getElementById("cam-label");
-const camRestartBtn=document.getElementById("cam-restart"), fabCamera=document.getElementById("fab-camera");
-let qrTimer=null, detector=null, stream=null, cameraRunning=false, usingZXing=false, zxingReader=null;
-
-function setCamStatus(kind,msg){camDot.className="dot "+(kind||"warn");camLabel.textContent="Caméra : "+(msg||"");if(cameraRunning){fabCamera.textContent="⏹️ Arrêter caméra";fabCamera.classList.add("alt");fabCamera.setAttribute("aria-pressed","true");}else{fabCamera.textContent="📷 Activer caméra";fabCamera.classList.remove("alt");fabCamera.setAttribute("aria-pressed","false");}}
-
-async function loadZXing(){
-  const s=document.getElementById("zxing-script");
-  if(s.dataset.loaded==="true") return true;
-  return new Promise(res=>{
-    s.onload=()=>{s.dataset.loaded="true";res(true);};
-    s.onerror=()=>res(false);
-    s.src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js";
-  });
+/* =========================
+   Helpers
+========================= */
+function normalizeToken(s){
+  if(!s) return "";
+  let str = String(s).trim().replace(/[\\r\\n\\t]/g,"");
+  if (str.length >= 5) return str;
+  const hex=(str.match(/[0-9A-Fa-f]{6,}/)||[null])[0];
+  if (hex) return hex.toUpperCase();
+  const dec=(str.match(/[0-9]{6,}/)||[null])[0];
+  if (dec) return dec;
+  return str;
+}
+function findLockerByUID(uid){
+  const n = normalizeToken(uid);
+  return state.map.find(r => (r.uid||"") === n) || null;
+}
+function findByLocker(locker){
+  const L = Number(locker);
+  return state.map.find(r => r.locker === L) || null;
+}
+function upsertRow(locker, uid){
+  const L = Number(locker);
+  const n = normalizeToken(uid);
+  let row = findByLocker(L);
+  if (row) row.uid = n;
+  else state.map.push({ locker:L, uid:n });
+  saveState(state);
+}
+function deleteRow(locker){
+  const L = Number(locker);
+  state.map = state.map.filter(r => r.locker !== L);
+  saveState(state);
 }
 
-async function startCamera(){
-  await stopCamera(); // reset
-  setCamStatus("warn","démarrage…");
-  try{
-    // 1) Tente BarcodeDetector natif
-    if("BarcodeDetector" in window){
-      detector=new window.BarcodeDetector({formats:["qr_code"]});
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
-      video.srcObject=stream; await video.play(); cameraRunning=true; usingZXing=false; setCamStatus("ok","opérationnelle");
-      qrTimer=setInterval(async()=>{ if(!video.videoWidth)return; canvas.width=video.videoWidth; canvas.height=video.videoHeight; const ctx=canvas.getContext("2d",{willReadFrequently:true}); ctx.drawImage(video,0,0,canvas.width,canvas.height); try{const codes=await detector.detect(canvas); if(codes&&codes.length){const text=codes[0].rawValue||""; if(text){handleScan(text); if(navigator.vibrate) navigator.vibrate(60);}}}catch(_){}} ,350);
-      stream.getVideoTracks().forEach(tr=>{ tr.onended=()=>{cameraRunning=false; setCamStatus("warn","redémarrage…"); setTimeout(()=>startCamera(),800);}; });
-      return;
-    }
+/* =========================
+   Navigation
+========================= */
+const viewKiosk = document.getElementById("view-kiosk");
+const viewAdmin = document.getElementById("view-admin");
+const viewTools = document.getElementById("view-tools");
+const tabKiosk = document.getElementById("tab-kiosk");
+const tabAdmin = document.getElementById("tab-admin");
+const tabTools = document.getElementById("tab-tools");
 
-    // 2) Fallback ZXing (iOS/Safari etc.)
-    const ok=await loadZXing();
-    if(!ok) throw new Error("Impossible de charger ZXing");
-    // @ts-ignore (global ZXing)
-    const {BrowserMultiFormatReader} = window.ZXingBrowser || window.ZXing;
-    zxingReader = new BrowserMultiFormatReader();
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cam = devices.find(d=>d.kind==="videoinput");
-    if(!cam) throw new Error("Pas de caméra détectée");
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
-    video.srcObject=stream; await video.play();
-    cameraRunning=true; usingZXing=true; setCamStatus("ok","opérationnelle (ZXing)");
-    // ZXing: lecture continue par frames
-    qrTimer=setInterval(async()=>{ if(!video.videoWidth)return;
-      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-      const ctx=canvas.getContext("2d",{willReadFrequently:true}); ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        const luminanceSrc = new window.ZXingBrowser.HTMLCanvasElementLuminanceSource(canvas);
-        const binBitmap = new window.ZXingBrowser.BinaryBitmap(new window.ZXingBrowser.HybridBinarizer(luminanceSrc));
-        const result = window.ZXingBrowser.QRCodeReader.decode(binBitmap);
-        if(result && result.getText){ const text = result.getText(); if(text){handleScan(text); if(navigator.vibrate) navigator.vibrate(60);} }
-      }catch(_){}
-    }, 400);
+function setTab(name){
+  viewKiosk.style.display = (name==="kiosk")?"block":"none";
+  viewAdmin.style.display  = (name==="admin")?"block":"none";
+  viewTools.style.display  = (name==="tools")?"block":"none";
+  tabKiosk.classList.toggle("accent", name==="kiosk");
+  tabAdmin.classList.toggle("accent", name==="admin");
+  tabTools.classList.toggle("accent", name==="tools");
+}
+tabKiosk.onclick = ()=>setTab("kiosk");
+tabAdmin.onclick = ()=>{ setTab("admin"); renderTable(); };
+tabTools.onclick = ()=>setTab("tools");
+setTab("kiosk");
 
-    stream.getVideoTracks().forEach(tr=>{ tr.onended=()=>{cameraRunning=false; setCamStatus("warn","redémarrage…"); setTimeout(()=>startCamera(),800);}; });
-  }catch(e){
-    const msg=(e && (e.name||e.message)) || String(e);
-    cameraRunning=false;
-    const isFramed = (window.top !== window.self);
-    if(/NotAllowedError|SecurityError|Permission|denied/i.test(msg) && isFramed){
-      kioskError.textContent = "La caméra est probablement bloquée par l’iframe. Intègre cette page comme 'Site externe (URL)' dans Wix, et assure-toi que l’iframe a allow=\"camera\".";
-    } else {
-      kioskError.textContent = "Caméra indisponible : " + msg;
-    }
-    setCamStatus("err","erreur");
+/* =========================
+   Kiosk – capture clavier (lecteur USB)
+========================= */
+const hiddenInput = document.getElementById("hidden-capture");
+const kioskContent = document.getElementById("kiosk-content");
+const kioskError = document.getElementById("kiosk-error");
+const kioskBox = document.getElementById("kiosk-box");
+let buffer = "";
+
+function showLocker(locker){
+  kioskError.textContent = "";
+  kioskContent.innerHTML = locker
+    ? '<div class="muted">Votre casier est le</div><div class="big">#'+locker+'</div>'
+    : '<span class="muted">Aucun casier trouvé pour cet identifiant.</span>';
+}
+function handleScan(raw){
+  const token = normalizeToken(raw);
+  if (!token || token.length < 5) return;
+  state.lastScan = token; saveState(state);
+  const row = findLockerByUID(token);
+  showLocker(row ? row.locker : null);
+}
+function focusCapture(){ hiddenInput.focus(); }
+
+hiddenInput.addEventListener("keydown", (e)=>{
+  if (e.key === "Enter"){
+    const data = buffer; buffer = "";
+    handleScan(data);
+  } else if (e.key.length === 1){
+    buffer += e.key;
+  } else if (e.key === "Backspace"){
+    buffer = buffer.slice(0, -1);
+  }
+});
+kioskBox.addEventListener("click", focusCapture);
+document.addEventListener("click", (e)=>{ if (viewKiosk.contains(e.target)) setTimeout(focusCapture,0); });
+focusCapture();
+
+/* =========================
+   Caméra (QR) – ZXing only (fiable iOS)
+========================= */
+const video = document.getElementById("qr-video");
+const canvas = document.getElementById("qr-canvas"); // non utilisé ici mais dispo si besoin
+const camDot = document.getElementById("cam-dot");
+const camLabel = document.getElementById("cam-label");
+const camRestartBtn = document.getElementById("cam-restart");
+const fabCamera = document.getElementById("fab-camera");
+
+let codeReader = null;
+let cameraRunning = false;
+let currentDeviceId = null;
+
+function setCamStatus(kind,msg){
+  camDot.className = "dot " + (kind||"warn");
+  camLabel.textContent = "Caméra : " + (msg||"");
+  if (cameraRunning){
+    fabCamera.textContent = "⏹️ Arrêter caméra";
+    fabCamera.classList.add("alt");
+    fabCamera.setAttribute("aria-pressed","true");
+  } else {
+    fabCamera.textContent = "📷 Activer caméra";
+    fabCamera.classList.remove("alt");
+    fabCamera.setAttribute("aria-pressed","false");
   }
 }
 
-async function stopCamera(){ if(qrTimer){clearInterval(qrTimer);qrTimer=null;} if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} video.srcObject=null; cameraRunning=false; detector=null; usingZXing=false; setCamStatus("warn","arrêtée"); }
+async function pickBackCamera(devices){
+  const backs = devices.filter(d => /back|rear|environment/i.test(d.label));
+  return (backs[0] || devices[0] || null)?.deviceId || null;
+}
 
-document.getElementById("cam-restart").onclick=()=>startCamera();
-document.getElementById("fab-camera").onclick=async()=>{ if(cameraRunning){await stopCamera();} else {await startCamera();} };
+async function startCameraZXing(){
+  try{
+    setCamStatus("warn","démarrage…");
+    codeReader = new ZXing.BrowserMultiFormatReader();
 
-// Essaye auto au chargement (desktop). Sur mobile, le bouton fournira le geste utilisateur.
-window.addEventListener("load", ()=>{ startCamera(); });
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    if (!devices || !devices.length){
+      setCamStatus("err","Aucune caméra détectée");
+      return;
+    }
+    currentDeviceId = await pickBackCamera(devices);
 
-document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible"){ if(cameraRunning){ startCamera(); } focusCapture(); }});
+    await codeReader.decodeFromVideoDevice(
+      currentDeviceId,
+      video,
+      (result, err) => {
+        if (result && result.getText){
+          const text = result.getText();
+          if (text){
+            handleScan(text);
+            if (navigator.vibrate) navigator.vibrate(60);
+          }
+        }
+        // erreurs de décodage = normal tant qu’aucun QR n’est présent
+      }
+    );
 
-/* ====== Admin table ====== */
-const mapBody=document.getElementById("map-body");const search=document.getElementById("search");
-function renderTable(){const q=(search.value||"").toLowerCase();const rows=state.map.slice().sort((a,b)=>a.locker-b.locker).filter(r=>!q||String(r.locker).includes(q)||(r.uid||"").toLowerCase().includes(q));mapBody.innerHTML="";rows.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td style="width:110px"><input class="input locker-input" value="${r.locker}" style="width:100%"/></td><td><div class="row" style="gap:6px"><input class="input uid-input" value="${r.uid||""}" placeholder="Scanner ici…" style="flex:1" /><button class="btn scan-btn">Scanner ici</button><button class="btn" title="Vider" data-action="clear">✕</button></div></td><td><div class="row" style="gap:6px"><button class="btn accent save-btn">Enregistrer</button><button class="btn" style="border-color:var(--danger);color:var(--danger)" title="Supprimer">Supprimer</button></div></td>`;mapBody.appendChild(tr);const lockerEl=tr.querySelector(".locker-input");const uidEl=tr.querySelector(".uid-input");const scanBtn=tr.querySelector(".scan-btn");const saveBtn=tr.querySelector(".save-btn");const delBtn=tr.querySelector('[title="Supprimer"]');const clearBtn=tr.querySelector('[data-action="clear"]');scanBtn.addEventListener("click",()=>{uidEl.focus();uidEl.value="";const handler=(e)=>{if(e.key==="Enter"){uidEl.value=normalizeToken(uidEl.value);document.removeEventListener("keydown",handler,true);}};document.addEventListener("keydown",handler,true);});clearBtn.addEventListener("click",()=>{uidEl.value="";});saveBtn.addEventListener("click",()=>{const L=Number(lockerEl.value);const U=normalizeToken(uidEl.value);if(!L){alert("Numéro de casier invalide.");return}if(U&&state.map.some(x=>x.uid===U&&x.locker!==L)){if(!confirm("Cet UID est déjà attribué à un autre casier. Continuer ?"))return}upsertRow(L,U);renderTable();});delBtn.addEventListener("click",()=>{if(confirm("Supprimer cette ligne ?")){deleteRow(lockerEl.value);renderTable();}});});}
-search.addEventListener("input",renderTable);
-document.getElementById("add-row").onclick=()=>{state.map.push({locker:0,uid:""});saveState(state);renderTable();};
-document.getElementById("gen-sample").onclick=()=>{if(!confirm("Créer/écraser les casiers 101–160 (UID vides) ?"))return;const set=new Set(state.map.map(r=>r.locker));for(let n=101;n<=160;n++){if(!set.has(n))state.map.push({locker:n,uid:""})}saveState(state);renderTable();};
+    cameraRunning = true;
+    setCamStatus("ok","opérationnelle");
 
-/* ====== Import/Export ====== */
-const area=document.getElementById("import-area");
-document.getElementById("btn-export-json").onclick=()=>{const data=JSON.stringify(state.map,null,2);downloadText("hedo-lockers.json",data);};
-document.getElementById("btn-export-csv").onclick=()=>{const rows=[["locker","uid"],...state.map.map(r=>[r.locker,r.uid||""])];const csv=rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\n");downloadText("hedo-lockers.csv",csv);};
-document.getElementById("btn-import-json").onclick=()=>{try{const arr=JSON.parse(area.value);if(!Array.isArray(arr))throw new Error("JSON invalide");state.map=arr.map(o=>({locker:Number(o.locker),uid:normalizeToken(o.uid||"")})).filter(o=>o.locker);saveState(state);renderTable();alert("Import JSON OK")}catch(e){alert("Erreur import JSON : "+e.message)}};
-document.getElementById("btn-import-csv").onclick=()=>{try{const lines=area.value.trim().split(/\r?\n/);const out=[];for(let i=0;i<lines.length;i++){const line=lines[i].trim();if(!line)continue;const parts=line.split(",");if(i===0 && /locker/i.test(parts[0]))continue;const locker=Number(parts[0]);const uid=normalizeToken(parts[1]||"");if(locker)out.push({locker,uid});}state.map=out;saveState(state);renderTable();alert("Import CSV OK")}catch(e){alert("Erreur import CSV : "+e.message)}};
-function downloadText(filename,text){const blob=new Blob([text],{type:"text/plain;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},0);}
+    const stream = video.srcObject;
+    if (stream){
+      stream.getVideoTracks().forEach(tr=>{
+        tr.onended = () => {
+          cameraRunning = false;
+          setCamStatus("warn","reprise…");
+        };
+      });
+    }
+  }catch(e){
+    cameraRunning = false;
+    const msg = (e && (e.name || e.message)) || String(e);
+    setCamStatus("err", msg.includes("Permission") ? "permission refusée" : "erreur");
+    const isFramed = (window.top !== window.self);
+    kioskError.textContent = "Caméra indisponible : " + msg +
+      (isFramed ? " (si intégré dans un site, l’iframe doit autoriser la caméra)" : "");
+  }
+}
 
-/* ====== Reset ====== */
-document.getElementById("btn-reset").onclick=()=>{if(!confirm("Réinitialiser toutes les données locales ?"))return;localStorage.removeItem(LS_KEY);state=loadState();renderTable();kioskContent.textContent="Scannez votre bracelet…";kioskError.textContent="";};
+async function stopCameraZXing(){
+  try{
+    if (codeReader){
+      codeReader.reset(); // stoppe stream+callbacks
+      codeReader = null;
+    }
+  } finally {
+    const stream = video.srcObject;
+    if (stream){
+      stream.getTracks().forEach(t=>t.stop());
+      video.srcObject = null;
+    }
+    cameraRunning = false;
+    setCamStatus("warn","arrêtée");
+  }
+}
 
-/* ====== Boot ====== */
+fabCamera.addEventListener("click", async ()=>{
+  if (cameraRunning) await stopCameraZXing();
+  else await startCameraZXing();
+});
+camRestartBtn.onclick = ()=>{ if (cameraRunning) stopCameraZXing().then(startCameraZXing); else startCameraZXing(); };
+
+// ⚠️ Sur iPhone, on ne démarre pas automatiquement : il faut cliquer 📷
+// Si tu veux tenter l’auto-start sur desktop uniquement, dé-commente :
+// window.addEventListener("load", ()=>{ if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) startCameraZXing(); });
+
+document.addEventListener("visibilitychange", ()=>{
+  if (document.visibilityState === "visible" && cameraRunning){
+    // iOS stoppe parfois la caméra en arrière-plan → redémarrer proprement
+    stopCameraZXing().then(startCameraZXing);
+  }
+});
+
+/* =========================
+   Admin – table mapping
+========================= */
+const mapBody = document.getElementById("map-body");
+const search = document.getElementById("search");
+
+function renderTable(){
+  const q = (search.value||"").toLowerCase();
+  const rows = state.map
+    .slice()
+    .sort((a,b)=>a.locker-b.locker)
+    .filter(r => !q || String(r.locker).includes(q) || (r.uid||"").toLowerCase().includes(q));
+
+  mapBody.innerHTML = "";
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="width:110px"><input class="input locker-input" value="${r.locker}" style="width:100%"/></td>
+      <td>
+        <div class="row" style="gap:6px">
+          <input class="input uid-input" value="${r.uid||""}" placeholder="Scanner ici…" style="flex:1" />
+          <button class="btn scan-btn">Scanner ici</button>
+          <button class="btn" title="Vider" data-action="clear">✕</button>
+        </div>
+      </td>
+      <td>
+        <div class="row" style="gap:6px">
+          <button class="btn accent save-btn">Enregistrer</button>
+          <button class="btn" style="border-color:var(--danger);color:var(--danger)" title="Supprimer">Supprimer</button>
+        </div>
+      </td>`;
+    mapBody.appendChild(tr);
+
+    const lockerEl = tr.querySelector(".locker-input");
+    const uidEl = tr.querySelector(".uid-input");
+    const scanBtn = tr.querySelector(".scan-btn");
+    const saveBtn = tr.querySelector(".save-btn");
+    const delBtn = tr.querySelector('[title="Supprimer"]');
+    const clearBtn = tr.querySelector('[data-action="clear"]');
+
+    // “Scanner ici” : capter le prochain scan clavier dans ce champ
+    scanBtn.addEventListener("click", ()=>{
+      uidEl.focus(); uidEl.value = "";
+      const handler = (e)=>{
+        if (e.key === "Enter"){
+          uidEl.value = normalizeToken(uidEl.value);
+          document.removeEventListener("keydown", handler, true);
+        }
+      };
+      document.addEventListener("keydown", handler, true);
+    });
+
+    clearBtn.addEventListener("click", ()=>{ uidEl.value=""; });
+
+    saveBtn.addEventListener("click", ()=>{
+      const L = Number(lockerEl.value);
+      const U = normalizeToken(uidEl.value);
+      if (!L){ alert("Numéro de casier invalide."); return; }
+      if (U && state.map.some(x=>x.uid===U && x.locker!==L)){
+        if (!confirm("Cet UID est déjà attribué à un autre casier. Continuer ?")) return;
+      }
+      upsertRow(L,U); renderTable();
+    });
+
+    delBtn.addEventListener("click", ()=>{
+      if (confirm("Supprimer cette ligne ?")){
+        deleteRow(lockerEl.value); renderTable();
+      }
+    });
+  });
+}
+search.addEventListener("input", renderTable);
+document.getElementById("add-row").onclick = ()=>{
+  state.map.push({ locker:0, uid:"" });
+  saveState(state); renderTable();
+};
+document.getElementById("gen-sample").onclick = ()=>{
+  if (!confirm("Créer/écraser les casiers 101–160 (UID vides) ?")) return;
+  const set = new Set(state.map.map(r=>r.locker));
+  for (let n=101;n<=160;n++){
+    if (!set.has(n)) state.map.push({ locker:n, uid:"" });
+  }
+  saveState(state); renderTable();
+};
+
+/* =========================
+   Import / Export
+========================= */
+const area = document.getElementById("import-area");
+document.getElementById("btn-export-json").onclick = ()=>{
+  const data = JSON.stringify(state.map, null, 2);
+  downloadText("hedo-lockers.json", data);
+};
+document.getElementById("btn-export-csv").onclick = ()=>{
+  const rows = [["locker","uid"], ...state.map.map(r=>[r.locker, r.uid||""])];
+  const csv = rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\\n");
+  downloadText("hedo-lockers.csv", csv);
+};
+document.getElementById("btn-import-json").onclick = ()=>{
+  try{
+    const arr = JSON.parse(area.value);
+    if (!Array.isArray(arr)) throw new Error("JSON invalide");
+    state.map = arr.map(o=>({ locker:Number(o.locker), uid: normalizeToken(o.uid||"") }))
+                   .filter(o=>o.locker);
+    saveState(state); renderTable(); alert("Import JSON OK");
+  }catch(e){ alert("Erreur import JSON : "+e.message); }
+};
+document.getElementById("btn-import-csv").onclick = ()=>{
+  try{
+    const lines = area.value.trim().split(/\\r?\\n/);
+    const out = [];
+    for (let i=0;i<lines.length;i++){
+      const line = lines[i].trim(); if (!line) continue;
+      const parts = line.split(",");
+      if (i===0 && /locker/i.test(parts[0])) continue; // header
+      const locker = Number(parts[0]);
+      const uid = normalizeToken(parts[1]||"");
+      if (locker) out.push({ locker, uid });
+    }
+    state.map = out; saveState(state); renderTable(); alert("Import CSV OK");
+  }catch(e){ alert("Erreur import CSV : "+e.message); }
+};
+function downloadText(filename, text){
+  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+/* =========================
+   Reset local
+========================= */
+document.getElementById("btn-reset").onclick = ()=>{
+  if (!confirm("Réinitialiser toutes les données locales ?")) return;
+  localStorage.removeItem(LS_KEY);
+  state = loadState();
+  renderTable();
+  kioskContent.textContent = "Scannez votre bracelet…";
+  kioskError.textContent = "";
+};
+
+/* =========================
+   Boot
+========================= */
 renderTable();
 </script>
 </body>
