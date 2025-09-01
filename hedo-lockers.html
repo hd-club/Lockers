@@ -5,25 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Hedo – Casier (RFID/QR) – Kiosk + Admin</title>
 
-<!-- ZXing (fallback robuste iOS/Safari) -->
-<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<!-- ZXing Browser (UMD) : compatible iPhone/Safari -->
+<script defer src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
 
 <style>
-:root{
-  --bg:#0d0f13;--panel:#141821;--text:#e9eef6;--muted:#9aa4b2;
-  --accent:#D4AF37;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;
-  --border:rgba(255,255,255,.12)
-}
+:root{--bg:#0d0f13;--panel:#141821;--text:#e9eef6;--muted:#9aa4b2;--accent:#D4AF37;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;--border:rgba(255,255,255,.12)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
 .wrap{min-height:100vh;display:flex;flex-direction:column}
 header{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .title{font-weight:700;letter-spacing:.3px}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
-.btn,.input,.select,textarea{
-  background:var(--panel);border:1px solid var(--border);color:var(--text);
-  padding:10px 12px;border-radius:10px
-}
+.btn,.input,.select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px}
 .btn{cursor:pointer}
 .btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 main{padding:18px;display:grid;grid-template-columns:1fr;gap:18px;flex:1}
@@ -45,7 +38,7 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
 .dot{width:10px;height:10px;border-radius:50%}
 .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--danger)}
 
-/* Bouton flottant mobile pour (dé)marre la caméra */
+/* Bouton flottant (mobile & desktop) pour démarrer/arrêter la caméra */
 .fab{
   position:fixed; right:16px; bottom:16px; z-index:50;
   background:var(--accent); color:#000; border:none;
@@ -54,16 +47,16 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
 .fab.alt{ background:var(--panel); color:var(--text); border:1px solid var(--border) }
 @media (min-width:900px){ .fab{ display:none } }
 
-/* Vidéo quasi-invisible mais active (meilleur pour iOS/Safari) */
+/* iPhone: la vidéo doit exister "à l'écran" (invisible mais présente) */
 #qr-video{
-  width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:-9999px
+  width:2px; height:2px; opacity:0; position:fixed; left:0; bottom:0; pointer-events:none;
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="title">Hedo – Lockers</div>
+    <div class="title">Hedo – Casier (RFID 125 kHz / QR)</div>
     <div class="tabs">
       <button class="btn accent" id="tab-kiosk">Kiosk</button>
       <button class="btn" id="tab-admin">Admin</button>
@@ -83,10 +76,13 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
       <h3>Écran client</h3>
       <div class="note">
         La <b>douchette USB</b> (RFID/QR en mode clavier) est capturée en permanence.
-        La <b>caméra</b> pour lire les QR s’active via le bouton 📷. La preview reste cachée.
+        La <b>caméra</b> pour lire les QR s’active via le bouton 📷 (preview cachée).
       </div>
 
+      <!-- capture clavier (lecteur USB / douchette) -->
       <input id="hidden-capture" class="hidden" aria-hidden="true" />
+
+      <!-- vidéo/canvas (vidéo invisible mais affichée, cf. CSS) -->
       <video id="qr-video" muted playsinline></video>
       <canvas id="qr-canvas" class="hidden"></canvas>
 
@@ -100,14 +96,12 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
     <section class="panel" id="view-admin" style="display:none">
       <h3>Administration — Mapping UID ↔ Casier</h3>
       <div class="row">
-        <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
+        <input class="input" id="search" placeholder="Rechercher (casier, UID)…" />
         <button class="btn" id="add-row">Ajouter une ligne</button>
         <button class="btn" id="gen-sample">Générer casiers 101–160 (VIDES)</button>
       </div>
       <table class="grid" id="map-table">
-        <thead>
-          <tr><th># Casier</th><th>UID (lecture seule 125 kHz ou contenu QR)</th><th>Actions</th></tr>
-        </thead>
+        <thead><tr><th># Casier</th><th>UID (lecture seule 125 kHz ou contenu QR)</th><th>Actions</th></tr></thead>
         <tbody id="map-body"></tbody>
       </table>
       <div class="note" style="margin-top:8px">Astuce : “Scanner ici” capte le prochain scan clavier dans la ligne.</div>
@@ -121,7 +115,7 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
         <button class="btn" id="btn-export-csv">Exporter CSV</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <textarea id="import-area" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV "locker,uid"'></textarea>
+        <textarea id="import-area" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV locker,uid'></textarea>
       </div>
       <div class="row">
         <button class="btn" id="btn-import-json">Importer JSON</button>
@@ -134,253 +128,132 @@ footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color
   <footer>Hedo — aucune donnée nominative ; uniquement la correspondance UID ↔ numéro de casier.</footer>
 </div>
 
-<!-- Bouton flottant mobile/desktop pour (dé)marre caméra -->
+<!-- Bouton flottant pour iPhone/Android/desktop : démarre/arrête la caméra -->
 <button id="fab-camera" class="fab" aria-pressed="false" aria-label="Activer la caméra">📷 Activer caméra</button>
 
 <script>
 /* =========================
-   Stockage local
+   Storage
 ========================= */
-const LS_KEY = "hedo_map_v5";
-function loadState(){
-  const raw = localStorage.getItem(LS_KEY);
-  if (raw) { try { return JSON.parse(raw) } catch(e){} }
-  const init = { map: [], lastScan: null };
-  localStorage.setItem(LS_KEY, JSON.stringify(init));
-  return init;
-}
-function saveState(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
-let state = loadState();
+const LS_KEY="hedo_map_v6";
+function loadState(){const raw=localStorage.getItem(LS_KEY);if(raw){try{return JSON.parse(raw)}catch{}}const init={map:[],lastScan:null};localStorage.setItem(LS_KEY,JSON.stringify(init));return init;}
+function saveState(s){localStorage.setItem(LS_KEY,JSON.stringify(s));}
+let state=loadState();
 
 /* =========================
    Helpers
 ========================= */
-function normalizeToken(s){
-  if(!s) return "";
-  let str = String(s).trim().replace(/[\\r\\n\\t]/g,"");
-  if (str.length >= 5) return str;
-  const hex=(str.match(/[0-9A-Fa-f]{6,}/)||[null])[0];
-  if (hex) return hex.toUpperCase();
-  const dec=(str.match(/[0-9]{6,}/)||[null])[0];
-  if (dec) return dec;
-  return str;
-}
-function findLockerByUID(uid){
-  const n = normalizeToken(uid);
-  return state.map.find(r => (r.uid||"") === n) || null;
-}
-function findByLocker(locker){
-  const L = Number(locker);
-  return state.map.find(r => r.locker === L) || null;
-}
-function upsertRow(locker, uid){
-  const L = Number(locker);
-  const n = normalizeToken(uid);
-  let row = findByLocker(L);
-  if (row) row.uid = n;
-  else state.map.push({ locker:L, uid:n });
-  saveState(state);
-}
-function deleteRow(locker){
-  const L = Number(locker);
-  state.map = state.map.filter(r => r.locker !== L);
-  saveState(state);
-}
+function normalizeToken(s){if(!s)return"";let str=String(s).trim().replace(/[\\r\\n\\t]/g,"");if(str.length>=5)return str;const hex=(str.match(/[0-9A-Fa-f]{6,}/)||[null])[0];if(hex)return hex.toUpperCase();const dec=(str.match(/[0-9]{6,}/)||[null])[0];if(dec)return dec;return str;}
+function findLockerByUID(uid){const n=normalizeToken(uid);return state.map.find(r=>(r.uid||"")===n)||null;}
+function findByLocker(locker){const L=Number(locker);return state.map.find(r=>r.locker===L)||null;}
+function upsertRow(locker,uid){const L=Number(locker);const n=normalizeToken(uid);let row=findByLocker(L);if(row){row.uid=n}else{state.map.push({locker:L,uid:n})}saveState(state);}
+function deleteRow(locker){const L=Number(locker);state.map=state.map.filter(r=>r.locker!==L);saveState(state);}
 
 /* =========================
    Navigation
 ========================= */
-const viewKiosk = document.getElementById("view-kiosk");
-const viewAdmin = document.getElementById("view-admin");
-const viewTools = document.getElementById("view-tools");
-const tabKiosk = document.getElementById("tab-kiosk");
-const tabAdmin = document.getElementById("tab-admin");
-const tabTools = document.getElementById("tab-tools");
-
-function setTab(name){
-  viewKiosk.style.display = (name==="kiosk")?"block":"none";
-  viewAdmin.style.display  = (name==="admin")?"block":"none";
-  viewTools.style.display  = (name==="tools")?"block":"none";
-  tabKiosk.classList.toggle("accent", name==="kiosk");
-  tabAdmin.classList.toggle("accent", name==="admin");
-  tabTools.classList.toggle("accent", name==="tools");
-}
-tabKiosk.onclick = ()=>setTab("kiosk");
-tabAdmin.onclick = ()=>{ setTab("admin"); renderTable(); };
-tabTools.onclick = ()=>setTab("tools");
-setTab("kiosk");
+const viewKiosk=document.getElementById("view-kiosk");
+const viewAdmin=document.getElementById("view-admin");
+const viewTools=document.getElementById("view-tools");
+const tabKiosk=document.getElementById("tab-kiosk");
+const tabAdmin=document.getElementById("tab-admin");
+const tabTools=document.getElementById("tab-tools");
+function setTab(name){viewKiosk.style.display=(name==="kiosk")?"block":"none";viewAdmin.style.display=(name==="admin")?"block":"none";viewTools.style.display=(name==="tools")?"block":"none";tabKiosk.classList.toggle("accent",name==="kiosk");tabAdmin.classList.toggle("accent",name==="admin");tabTools.classList.toggle("accent",name==="tools");}
+tabKiosk.onclick=()=>setTab("kiosk");tabAdmin.onclick=()=>{setTab("admin");renderTable();};tabTools.onclick=()=>setTab("tools");setTab("kiosk");
 
 /* =========================
    Kiosk – capture clavier (lecteur USB)
 ========================= */
-const hiddenInput = document.getElementById("hidden-capture");
-const kioskContent = document.getElementById("kiosk-content");
-const kioskError = document.getElementById("kiosk-error");
-const kioskBox = document.getElementById("kiosk-box");
-let buffer = "";
-
-function showLocker(locker){
-  kioskError.textContent = "";
-  kioskContent.innerHTML = locker
-    ? '<div class="muted">Votre casier est le</div><div class="big">#'+locker+'</div>'
-    : '<span class="muted">Aucun casier trouvé pour cet identifiant.</span>';
-}
-function handleScan(raw){
-  const token = normalizeToken(raw);
-  if (!token || token.length < 5) return;
-  state.lastScan = token; saveState(state);
-  const row = findLockerByUID(token);
-  showLocker(row ? row.locker : null);
-}
-function focusCapture(){ hiddenInput.focus(); }
-
-hiddenInput.addEventListener("keydown", (e)=>{
-  if (e.key === "Enter"){
-    const data = buffer; buffer = "";
-    handleScan(data);
-  } else if (e.key.length === 1){
-    buffer += e.key;
-  } else if (e.key === "Backspace"){
-    buffer = buffer.slice(0, -1);
-  }
-});
-kioskBox.addEventListener("click", focusCapture);
-document.addEventListener("click", (e)=>{ if (viewKiosk.contains(e.target)) setTimeout(focusCapture,0); });
-focusCapture();
+const hiddenInput=document.getElementById("hidden-capture");
+const kioskContent=document.getElementById("kiosk-content");
+const kioskError=document.getElementById("kiosk-error");
+const kioskBox=document.getElementById("kiosk-box");
+let buffer="";
+function showLocker(locker){kioskError.textContent="";kioskContent.innerHTML=locker?'<div class="muted">Votre casier est le</div><div class="big">#'+locker+'</div>':'<span class="muted">Aucun casier trouvé pour cet identifiant.</span>';}
+function handleScan(raw){const token=normalizeToken(raw);if(!token||token.length<5)return;state.lastScan=token;saveState(state);const row=findLockerByUID(token);showLocker(row?row.locker:null);}
+function focusCapture(){hiddenInput.focus();}
+hiddenInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const data=buffer;buffer="";handleScan(data);}else if(e.key.length===1){buffer+=e.key;}else if(e.key==="Backspace"){buffer=buffer.slice(0,-1);}});
+kioskBox.addEventListener("click",focusCapture);document.addEventListener("click",e=>{if(viewKiosk.contains(e.target))setTimeout(focusCapture,0);});focusCapture();
 
 /* =========================
-   Caméra (QR) – ZXing only (fiable iOS)
+   Caméra (QR) – ZXingBrowser (fiable iOS)
 ========================= */
-const video = document.getElementById("qr-video");
-const canvas = document.getElementById("qr-canvas"); // non utilisé ici mais dispo si besoin
-const camDot = document.getElementById("cam-dot");
-const camLabel = document.getElementById("cam-label");
-const camRestartBtn = document.getElementById("cam-restart");
-const fabCamera = document.getElementById("fab-camera");
+const video=document.getElementById("qr-video");
+const camDot=document.getElementById("cam-dot");
+const camLabel=document.getElementById("cam-label");
+const camRestartBtn=document.getElementById("cam-restart");
+const fabCamera=document.getElementById("fab-camera");
 
-let codeReader = null;
-let cameraRunning = false;
-let currentDeviceId = null;
+let codeReader=null, cameraRunning=false, controls=null;
 
 function setCamStatus(kind,msg){
-  camDot.className = "dot " + (kind||"warn");
-  camLabel.textContent = "Caméra : " + (msg||"");
-  if (cameraRunning){
-    fabCamera.textContent = "⏹️ Arrêter caméra";
-    fabCamera.classList.add("alt");
-    fabCamera.setAttribute("aria-pressed","true");
-  } else {
-    fabCamera.textContent = "📷 Activer caméra";
-    fabCamera.classList.remove("alt");
-    fabCamera.setAttribute("aria-pressed","false");
-  }
+  camDot.className="dot "+(kind||"warn");
+  camLabel.textContent="Caméra : "+(msg||"");
+  if(cameraRunning){fabCamera.textContent="⏹️ Arrêter caméra";fabCamera.classList.add("alt");fabCamera.setAttribute("aria-pressed","true");}
+  else{fabCamera.textContent="📷 Activer caméra";fabCamera.classList.remove("alt");fabCamera.setAttribute("aria-pressed","false");}
 }
 
-async function pickBackCamera(devices){
-  const backs = devices.filter(d => /back|rear|environment/i.test(d.label));
-  return (backs[0] || devices[0] || null)?.deviceId || null;
-}
-
-async function startCameraZXing(){
+async function startCamera(){
   try{
     setCamStatus("warn","démarrage…");
-    codeReader = new ZXing.BrowserMultiFormatReader();
+    // iOS: on préfère decodeFromConstraints (facingMode: environment)
+    const { BrowserMultiFormatReader } = window.ZXingBrowser;
+    codeReader = new BrowserMultiFormatReader();
 
-    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    if (!devices || !devices.length){
-      setCamStatus("err","Aucune caméra détectée");
-      return;
-    }
-    currentDeviceId = await pickBackCamera(devices);
-
-    await codeReader.decodeFromVideoDevice(
-      currentDeviceId,
+    // Demande permission via constraints (geste bouton requis sur iOS)
+    controls = await codeReader.decodeFromConstraints(
+      { video: { facingMode: { ideal: "environment" } } },
       video,
       (result, err) => {
         if (result && result.getText){
           const text = result.getText();
-          if (text){
-            handleScan(text);
-            if (navigator.vibrate) navigator.vibrate(60);
-          }
+          if (text){ handleScan(text); if(navigator.vibrate) navigator.vibrate(60); }
         }
-        // erreurs de décodage = normal tant qu’aucun QR n’est présent
+        // Les "err" sont normaux tant qu'aucun QR n'est vu.
       }
     );
 
-    cameraRunning = true;
-    setCamStatus("ok","opérationnelle");
-
+    // Marquer running + surveiller arrêt piste
+    cameraRunning=true; setCamStatus("ok","opérationnelle");
     const stream = video.srcObject;
-    if (stream){
-      stream.getVideoTracks().forEach(tr=>{
-        tr.onended = () => {
-          cameraRunning = false;
-          setCamStatus("warn","reprise…");
-        };
-      });
-    }
+    if(stream){ stream.getVideoTracks().forEach(tr => { tr.onended = () => { cameraRunning=false; setCamStatus("warn","arrêtée"); }; }); }
   }catch(e){
-    cameraRunning = false;
-    const msg = (e && (e.name || e.message)) || String(e);
-    setCamStatus("err", msg.includes("Permission") ? "permission refusée" : "erreur");
+    cameraRunning=false;
+    const msg=(e && (e.name||e.message)) || String(e);
+    setCamStatus("err", /Permission|NotAllowed|denied/i.test(msg) ? "permission refusée" : "erreur");
     const isFramed = (window.top !== window.self);
-    kioskError.textContent = "Caméra indisponible : " + msg +
-      (isFramed ? " (si intégré dans un site, l’iframe doit autoriser la caméra)" : "");
+    kioskError.textContent = "Caméra indisponible : " + msg + (isFramed ? " (si intégré, l’iframe doit autoriser camera)" : "");
   }
 }
 
-async function stopCameraZXing(){
+async function stopCamera(){
   try{
-    if (codeReader){
-      codeReader.reset(); // stoppe stream+callbacks
-      codeReader = null;
-    }
-  } finally {
+    if(controls && controls.stop){ controls.stop(); } // ZXing stop
+    if(codeReader){ codeReader.reset(); }
+  }finally{
     const stream = video.srcObject;
-    if (stream){
-      stream.getTracks().forEach(t=>t.stop());
-      video.srcObject = null;
-    }
-    cameraRunning = false;
-    setCamStatus("warn","arrêtée");
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
+    controls=null; codeReader=null; cameraRunning=false; setCamStatus("warn","arrêtée");
   }
 }
 
-fabCamera.addEventListener("click", async ()=>{
-  if (cameraRunning) await stopCameraZXing();
-  else await startCameraZXing();
-});
-camRestartBtn.onclick = ()=>{ if (cameraRunning) stopCameraZXing().then(startCameraZXing); else startCameraZXing(); };
+fabCamera.addEventListener("click", async ()=>{ if(cameraRunning) await stopCamera(); else await startCamera(); });
+camRestartBtn.onclick = ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); };
 
-// ⚠️ Sur iPhone, on ne démarre pas automatiquement : il faut cliquer 📷
-// Si tu veux tenter l’auto-start sur desktop uniquement, dé-commente :
-// window.addEventListener("load", ()=>{ if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) startCameraZXing(); });
-
-document.addEventListener("visibilitychange", ()=>{
-  if (document.visibilityState === "visible" && cameraRunning){
-    // iOS stoppe parfois la caméra en arrière-plan → redémarrer proprement
-    stopCameraZXing().then(startCameraZXing);
-  }
-});
+// iPhone : on ne tente pas d'auto-start (geste utilisateur obligatoire)
 
 /* =========================
-   Admin – table mapping
+   Admin table
 ========================= */
-const mapBody = document.getElementById("map-body");
-const search = document.getElementById("search");
-
+const mapBody=document.getElementById("map-body");
+const search=document.getElementById("search");
 function renderTable(){
-  const q = (search.value||"").toLowerCase();
-  const rows = state.map
-    .slice()
-    .sort((a,b)=>a.locker-b.locker)
-    .filter(r => !q || String(r.locker).includes(q) || (r.uid||"").toLowerCase().includes(q));
-
-  mapBody.innerHTML = "";
+  const q=(search.value||"").toLowerCase();
+  const rows=state.map.slice().sort((a,b)=>a.locker-b.locker).filter(r=>!q || String(r.locker).includes(q) || (r.uid||"").toLowerCase().includes(q));
+  mapBody.innerHTML="";
   rows.forEach(r=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
       <td style="width:110px"><input class="input locker-input" value="${r.locker}" style="width:100%"/></td>
       <td>
         <div class="row" style="gap:6px">
@@ -397,115 +270,62 @@ function renderTable(){
       </td>`;
     mapBody.appendChild(tr);
 
-    const lockerEl = tr.querySelector(".locker-input");
-    const uidEl = tr.querySelector(".uid-input");
-    const scanBtn = tr.querySelector(".scan-btn");
-    const saveBtn = tr.querySelector(".save-btn");
-    const delBtn = tr.querySelector('[title="Supprimer"]');
-    const clearBtn = tr.querySelector('[data-action="clear"]');
+    const lockerEl=tr.querySelector(".locker-input");
+    const uidEl=tr.querySelector(".uid-input");
+    const scanBtn=tr.querySelector(".scan-btn");
+    const saveBtn=tr.querySelector(".save-btn");
+    const delBtn=tr.querySelector('[title="Supprimer"]');
+    const clearBtn=tr.querySelector('[data-action="clear"]');
 
-    // “Scanner ici” : capter le prochain scan clavier dans ce champ
     scanBtn.addEventListener("click", ()=>{
-      uidEl.focus(); uidEl.value = "";
-      const handler = (e)=>{
-        if (e.key === "Enter"){
-          uidEl.value = normalizeToken(uidEl.value);
-          document.removeEventListener("keydown", handler, true);
-        }
-      };
+      uidEl.focus(); uidEl.value="";
+      const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value=normalizeToken(uidEl.value); document.removeEventListener("keydown",handler,true); } };
       document.addEventListener("keydown", handler, true);
     });
 
     clearBtn.addEventListener("click", ()=>{ uidEl.value=""; });
 
     saveBtn.addEventListener("click", ()=>{
-      const L = Number(lockerEl.value);
-      const U = normalizeToken(uidEl.value);
-      if (!L){ alert("Numéro de casier invalide."); return; }
-      if (U && state.map.some(x=>x.uid===U && x.locker!==L)){
-        if (!confirm("Cet UID est déjà attribué à un autre casier. Continuer ?")) return;
+      const L=Number(lockerEl.value); const U=normalizeToken(uidEl.value);
+      if(!L){ alert("Numéro de casier invalide."); return; }
+      if(U && state.map.some(x=>x.uid===U && x.locker!==L)){
+        if(!confirm("Cet UID est déjà attribué à un autre casier. Continuer ?")) return;
       }
       upsertRow(L,U); renderTable();
     });
 
-    delBtn.addEventListener("click", ()=>{
-      if (confirm("Supprimer cette ligne ?")){
-        deleteRow(lockerEl.value); renderTable();
-      }
-    });
+    delBtn.addEventListener("click", ()=>{ if(confirm("Supprimer cette ligne ?")){ deleteRow(lockerEl.value); renderTable(); } });
   });
 }
 search.addEventListener("input", renderTable);
-document.getElementById("add-row").onclick = ()=>{
-  state.map.push({ locker:0, uid:"" });
-  saveState(state); renderTable();
-};
-document.getElementById("gen-sample").onclick = ()=>{
-  if (!confirm("Créer/écraser les casiers 101–160 (UID vides) ?")) return;
-  const set = new Set(state.map.map(r=>r.locker));
-  for (let n=101;n<=160;n++){
-    if (!set.has(n)) state.map.push({ locker:n, uid:"" });
-  }
+document.getElementById("add-row").onclick=()=>{ state.map.push({locker:0,uid:""}); saveState(state); renderTable(); };
+document.getElementById("gen-sample").onclick=()=>{
+  if(!confirm("Créer/écraser les casiers 101–160 (UID vides) ?")) return;
+  const set=new Set(state.map.map(r=>r.locker));
+  for(let n=101;n<=160;n++){ if(!set.has(n)) state.map.push({locker:n,uid:""}); }
   saveState(state); renderTable();
 };
 
 /* =========================
    Import / Export
 ========================= */
-const area = document.getElementById("import-area");
-document.getElementById("btn-export-json").onclick = ()=>{
-  const data = JSON.stringify(state.map, null, 2);
-  downloadText("hedo-lockers.json", data);
-};
-document.getElementById("btn-export-csv").onclick = ()=>{
-  const rows = [["locker","uid"], ...state.map.map(r=>[r.locker, r.uid||""])];
-  const csv = rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\\n");
-  downloadText("hedo-lockers.csv", csv);
-};
-document.getElementById("btn-import-json").onclick = ()=>{
-  try{
-    const arr = JSON.parse(area.value);
-    if (!Array.isArray(arr)) throw new Error("JSON invalide");
-    state.map = arr.map(o=>({ locker:Number(o.locker), uid: normalizeToken(o.uid||"") }))
-                   .filter(o=>o.locker);
-    saveState(state); renderTable(); alert("Import JSON OK");
-  }catch(e){ alert("Erreur import JSON : "+e.message); }
-};
-document.getElementById("btn-import-csv").onclick = ()=>{
-  try{
-    const lines = area.value.trim().split(/\\r?\\n/);
-    const out = [];
-    for (let i=0;i<lines.length;i++){
-      const line = lines[i].trim(); if (!line) continue;
-      const parts = line.split(",");
-      if (i===0 && /locker/i.test(parts[0])) continue; // header
-      const locker = Number(parts[0]);
-      const uid = normalizeToken(parts[1]||"");
-      if (locker) out.push({ locker, uid });
-    }
-    state.map = out; saveState(state); renderTable(); alert("Import CSV OK");
-  }catch(e){ alert("Erreur import CSV : "+e.message); }
-};
-function downloadText(filename, text){
-  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-}
+const area=document.getElementById("import-area");
+document.getElementById("btn-export-json").onclick=()=>{ const data=JSON.stringify(state.map,null,2); downloadText("hedo-lockers.json", data); };
+document.getElementById("btn-export-csv").onclick=()=>{ const rows=[["locker","uid"], ...state.map.map(r=>[r.locker, r.uid||""])]; const csv=rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\\n"); downloadText("hedo-lockers.csv", csv); };
+document.getElementById("btn-import-json").onclick=()=>{ try{ const arr=JSON.parse(area.value); if(!Array.isArray(arr)) throw new Error("JSON invalide"); state.map=arr.map(o=>({locker:Number(o.locker),uid:normalizeToken(o.uid||"")})).filter(o=>o.locker); saveState(state); renderTable(); alert("Import JSON OK"); }catch(e){ alert("Erreur import JSON : "+e.message); } };
+document.getElementById("btn-import-csv").onclick=()=>{ try{ const lines=area.value.trim().split(/\\r?\\n/); const out=[]; for(let i=0;i<lines.length;i++){ const line=lines[i].trim(); if(!line)continue; const parts=line.split(","); if(i===0 && /locker/i.test(parts[0])) continue; const locker=Number(parts[0]); const uid=normalizeToken(parts[1]||""); if(locker) out.push({locker,uid}); } state.map=out; saveState(state); renderTable(); alert("Import CSV OK"); }catch(e){ alert("Erreur import CSV : "+e.message); } };
+function downloadText(filename, text){ const blob=new Blob([text],{type:"text/plain;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0); }
 
 /* =========================
    Reset local
 ========================= */
-document.getElementById("btn-reset").onclick = ()=>{
-  if (!confirm("Réinitialiser toutes les données locales ?")) return;
+document.getElementById("btn-reset").onclick=()=>{
+  if(!confirm("Réinitialiser toutes les données locales ?")) return;
   localStorage.removeItem(LS_KEY);
-  state = loadState();
+  state=loadState();
   renderTable();
-  kioskContent.textContent = "Scannez votre bracelet…";
-  kioskError.textContent = "";
+  kioskContent.textContent="Scannez votre bracelet…";
+  kioskError.textContent="";
 };
 
 /* =========================
