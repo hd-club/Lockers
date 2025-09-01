@@ -195,59 +195,170 @@ function focusCapture(){hiddenInput.focus();}
 hiddenInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const data=buffer;buffer="";handleScan(data);}else if(e.key.length===1){buffer+=e.key;}else if(e.key==="Backspace"){buffer=buffer.slice(0,-1);}});
 kioskBox.addEventListener("click",focusCapture);document.addEventListener("click",e=>{if(viewKiosk.contains(e.target))setTimeout(focusCapture,0);});focusCapture();
 
+<script>
 /* =========================
-   Caméra (QR) – ZXingBrowser (fiable iOS)
+   Caméra iOS18 – warm-up + ZXing auto
 ========================= */
-const video=document.getElementById("qr-video");
-const camDot=document.getElementById("cam-dot");
-const camLabel=document.getElementById("cam-label");
-const camRestartBtn=document.getElementById("cam-restart");
-const fabCamera=document.getElementById("fab-camera");
+const video = document.getElementById("qr-video");
+const camDot = document.getElementById("cam-dot");
+const camLabel = document.getElementById("cam-label");
+const camRestartBtn = document.getElementById("cam-restart");
+const fabCamera = document.getElementById("fab-camera");
 
-let codeReader=null, cameraRunning=false, controls=null;
+let cameraRunning = false;
+let zxingReader = null;      // instance (browser ou library)
+let zxingControls = null;    // .stop() si dispo
 
 function setCamStatus(kind,msg){
-  camDot.className="dot "+(kind||"warn");
-  camLabel.textContent="Caméra : "+(msg||"");
-  if(cameraRunning){fabCamera.textContent="⏹️ Arrêter caméra";fabCamera.classList.add("alt");fabCamera.setAttribute("aria-pressed","true");}
-  else{fabCamera.textContent="📷 Activer caméra";fabCamera.classList.remove("alt");fabCamera.setAttribute("aria-pressed","false");}
+  camDot.className = "dot " + (kind||"warn");
+  camLabel.textContent = "Caméra : " + (msg||"");
+  if (cameraRunning){
+    fabCamera.textContent = "⏹️ Arrêter caméra";
+    fabCamera.classList.add("alt");
+    fabCamera.setAttribute("aria-pressed","true");
+  } else {
+    fabCamera.textContent = "📷 Activer caméra";
+    fabCamera.classList.remove("alt");
+    fabCamera.setAttribute("aria-pressed","false");
+  }
 }
 
-async function startCamera(){
-  try{
-    setCamStatus("warn","démarrage…");
-    const { BrowserMultiFormatReader } = window.ZXingBrowser;
-    codeReader = new BrowserMultiFormatReader();
-    controls = await codeReader.decodeFromConstraints(
+function showCamError(err){
+  const kioskError = document.getElementById("kiosk-error");
+  const name = err?.name || "";
+  const msg  = err?.message || String(err);
+  const framed = (window.top !== window.self);
+  let extra = "";
+  if (/NotAllowed|denied|Permission/i.test(name+msg)) {
+    extra = " • Vérifie dans Réglages > Safari > Appareil photo : ‘Demander’.";
+  } else if (/NotFound|Overconstrained/i.test(name+msg)) {
+    extra = " • Aucune caméra détectée (redémarre l’iPhone ?).";
+  }
+  if (framed) {
+    extra += " • Si intégré dans Wix, utilise “Site externe (URL)” et assure l’attribut allow=\"camera\".";
+  }
+  kioskError.textContent = `Caméra indisponible (${name || "Erreur"}): ${msg}${extra}`;
+  setCamStatus("err","erreur");
+}
+
+/** 1) Warm-up permission iOS : demande gUM explicite, puis stoppe tout */
+async function requestCameraPermission(){
+  // doit être appelé suite à un GESTE utilisateur (clic bouton)
+  const constraints = { video: { facingMode: { ideal: "environment" } }, audio:false };
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  // stop immédiat → on ne garde pas ce stream
+  stream.getTracks().forEach(t=>t.stop());
+}
+
+/** 2) Démarrer ZXing (browser UMD ou library UMD, on s’adapte) */
+async function startZXing(){
+  // Détecte quel bundle UMD est présent
+  const hasBrowser = !!(window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader);
+  const hasLibrary = !!(window.ZXing && window.ZXing.BrowserMultiFormatReader);
+
+  if (!hasBrowser && !hasLibrary) {
+    throw new Error("ZXing UMD non chargé — vérifie la balise <script> CDN.");
+  }
+
+  // Fabrique l’instance reader
+  const ReaderClass = hasBrowser
+    ? window.ZXingBrowser.BrowserMultiFormatReader
+    : window.ZXing.BrowserMultiFormatReader;
+
+  zxingReader = new ReaderClass();
+
+  // Certaines versions exposent decodeFromConstraints (préféré iOS)
+  const decodeFromConstraints = (hasBrowser && zxingReader.decodeFromConstraints)
+                             || (hasLibrary && zxingReader.decodeFromConstraints);
+
+  // Callback unique
+  const onResult = (result, err) => {
+    if (result && result.getText) {
+      const text = result.getText();
+      if (text) {
+        // handleScan défini ailleurs dans ton code
+        handleScan(text);
+        if (navigator.vibrate) navigator.vibrate(60);
+      }
+    }
+    // err = normal tant qu'aucun QR
+  };
+
+  if (decodeFromConstraints) {
+    // ✅ iOS-friendly
+    zxingControls = await zxingReader.decodeFromConstraints(
       { video: { facingMode: { ideal: "environment" } } },
       video,
-      (result, err) => {
-        if (result && result.getText){
-          const text = result.getText();
-          if (text){ handleScan(text); if(navigator.vibrate) navigator.vibrate(60); }
-        }
-      }
+      onResult
     );
-    cameraRunning=true; setCamStatus("ok","opérationnelle");
-    const stream=video.srcObject; if(stream){ stream.getVideoTracks().forEach(tr=>{ tr.onended=()=>{ cameraRunning=false; setCamStatus("warn","arrêtée"); }; }); }
-  }catch(e){
-    cameraRunning=false;
-    const msg=(e && (e.name||e.message)) || String(e);
-    setCamStatus("err", /Permission|NotAllowed|denied/i.test(msg) ? "permission refusée" : "erreur");
-    const isFramed = (window.top !== window.self);
-    kioskError.textContent = "Caméra indisponible : " + msg + (isFramed ? " (si intégré, l’iframe doit autoriser camera)" : "");
-  }
-}
-async function stopCamera(){
-  try{ if(controls && controls.stop){ controls.stop(); } if(codeReader){ codeReader.reset(); } }
-  finally{
-    const stream=video.srcObject; if(stream){ stream.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
-    controls=null; codeReader=null; cameraRunning=false; setCamStatus("warn","arrêtée");
-  }
-}
-fabCamera.addEventListener("click", async ()=>{ if(cameraRunning) await stopCamera(); else await startCamera(); });
-camRestartBtn.onclick = ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); };
+  } else if (zxingReader.decodeFromVideoDevice) {
+    // Alternative
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d=>d.kind==="videoinput");
+    const back = cams.find(d=>/back|rear|environment/i.test(d.label)) || cams[0] || null;
+    const deviceId = back?.deviceId || undefined;
 
+    await zxingReader.decodeFromVideoDevice(deviceId, video, onResult);
+    // certaines builds ne renvoient pas de controls — on gérera dans stop()
+  } else {
+    throw new Error("Aucune API ZXing compatible (decodeFromConstraints/VideoDevice indisponible).");
+  }
+
+  // tracks onended → état
+  const stream = video.srcObject;
+  if (stream) {
+    stream.getVideoTracks().forEach(tr=>{
+      tr.onended = () => { cameraRunning = false; setCamStatus("warn","arrêtée"); };
+    });
+  }
+}
+
+/** 3) Arrêt propre */
+async function stopCamera(){
+  try {
+    if (zxingControls && zxingControls.stop) { zxingControls.stop(); }
+    if (zxingReader && zxingReader.reset)   { zxingReader.reset(); }
+  } catch {}
+  finally {
+    const s = video.srcObject;
+    if (s) { s.getTracks().forEach(t=>t.stop()); video.srcObject = null; }
+    zxingReader = null;
+    zxingControls = null;
+    cameraRunning = false;
+    setCamStatus("warn","arrêtée");
+  }
+}
+
+/** 4) Cycle start */
+async function startCamera(){
+  try{
+    setCamStatus("warn","permission…");
+    await requestCameraPermission();          // warm-up (sur iOS, essentielle)
+    setCamStatus("warn","démarrage…");
+    await startZXing();                       // lance ZXing
+    cameraRunning = true;
+    setCamStatus("ok","opérationnelle");
+  }catch(e){
+    cameraRunning = false;
+    showCamError(e);
+  }
+}
+
+/* Boutons */
+fabCamera.addEventListener("click", async ()=>{
+  if (cameraRunning) await stopCamera();
+  else await startCamera();                   // → demande de permission si nécessaire
+});
+camRestartBtn.onclick = ()=>{ if (cameraRunning) stopCamera().then(startCamera); else startCamera(); };
+
+/* iOS : on ne lance PAS automatiquement (geste requis). */
+document.addEventListener("visibilitychange", ()=>{
+  if (document.visibilityState === "visible" && cameraRunning) {
+    // certaines versions mettent la piste en pause → relance propre
+    stopCamera().then(startCamera).catch(()=>{});
+  }
+});
+</script>
 /* =========================
    Admin table
 ========================= */
