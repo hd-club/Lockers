@@ -12,8 +12,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
-<!-- ZXing (QR) -->
-<script defer src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+
+<!-- Fallback QR decoder -->
+<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 <style>
 :root{
@@ -60,6 +61,7 @@ body{
 .btn.inline{width:auto}
 .btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .btn.danger{border-color:var(--err);color:var(--err)}
+.btn.ghost{background:transparent;border:1px dashed var(--border)}
 .btn[disabled]{opacity:.6;cursor:not-allowed}
 
 /* Kiosk box */
@@ -77,8 +79,12 @@ body{
 .lbl{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 
-/* Camera (iOS needs a real video element present) */
-#qr-video{width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0;pointer-events:none}
+/* QR video: doit être rendu (iOS) : hors écran mais dimensions réelles */
+#qr-video{
+  position:fixed; left:-9999px; top:auto;
+  width:160px; height:120px; opacity:0.01;
+  pointer-events:none; z-index:-1;
+}
 
 /* Bottom nav (safe-area) */
 .bnav{position:fixed;left:0;right:0;bottom:0;z-index:55;background:rgba(15,17,25,.92);backdrop-filter:blur(10px);border-top:1px solid var(--border);
@@ -93,7 +99,7 @@ body{
 .fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
 @media(min-width:900px){.fab{bottom:20px}}
 
-/* Auth visibility helpers (PATCH) */
+/* Auth visibility helpers */
 [data-authonly]{display:none}
 [data-authonly].show{display:initial}
 </style>
@@ -112,7 +118,7 @@ body{
   </div>
 </header>
 
-<!-- Drawer (hamburger menu) -->
+<!-- Drawer -->
 <aside id="drawer" class="drawer" aria-hidden="true">
   <div class="panel">
     <h3>Actions & Compte</h3>
@@ -128,9 +134,9 @@ body{
       <div class="small"><span id="auth-status">Non connecté</span> <span id="role-status"></span></div>
     </div>
 
-    <div class="section-title">Outils (affichés après connexion)</div>
+    <div class="section-title">Outils</div>
     <div class="stack" data-authonly>
-      <button class="btn" id="drawer-create-001-130" title="Nécessite droits admin pour écrire">Créer casiers 001 → 130</button>
+      <button class="btn" id="drawer-create-001-130" title="Écriture en base (admin requis)">Créer casiers 001 → 130</button>
       <button class="btn" id="drawer-export-json">Exporter JSON</button>
       <button class="btn" id="drawer-export-csv">Exporter CSV</button>
       <button class="btn" id="drawer-import-json">Importer JSON (local)</button>
@@ -168,12 +174,12 @@ body{
   <section id="view-admin" style="display:none">
     <div class="card">
       <h3>Administration</h3>
-      <p class="note">Les outils s’affichent après connexion. Les écritures en base restent réservées aux <b>admins</b>.</p>
+      <p class="note">Édite le mapping <b>UID ↔ Casier</b>. En base (Firestore) : <b>admins</b> uniquement.</p>
 
       <div class="searchbar">
         <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
-        <button class="btn inline" id="btn-add-card" data-authonly>Ajouter une ligne</button>
-        <button class="btn inline accent" id="btn-create-001-130" data-authonly title="Nécessite droits admin pour écrire">Créer 001 → 130</button>
+        <button class="btn inline" id="btn-add-card" data-authonly>Ajouter une ligne (locale)</button>
+        <button class="btn inline accent" id="btn-create-001-130" data-authonly title="Écriture en base (admin requis)">Créer 001 → 130</button>
       </div>
 
       <div id="cards" class="cards"></div>
@@ -248,7 +254,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v6";
+const LS_KEY="hedo_lockers_cache_v7";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -267,31 +273,32 @@ function setAuthUI(isAuthed){
 const LOCKERS = () => collection(db,"lockers");
 const LOCKER  = (id)=> doc(db,"lockers",String(id));
 const ADMINS  = (uid)=> doc(db,"admins",String(uid));
+const padId = (n)=> {
+  const num = Number(n);
+  if (Number.isNaN(num) || num < 0) return String(n||"");
+  // Canonique sur 3 chiffres (001..999). Ajuste si tu veux 4 chiffres.
+  return String(num).padStart(3,"0");
+};
 
-async function dbFetchAll(){
-  const qs = await getDocs(query(LOCKERS(), orderBy("locker")));
-  return qs.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
+async function dbUpsert(locker, uid){
+  // ID doc canonique pour éviter les doublons "1" vs "001"
+  const id = padId(locker);
+  await setDoc(LOCKER(id), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true });
 }
-async function dbUpsert(locker, uid){ await setDoc(LOCKER(locker), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true }); }
-async function dbDelete(locker){ await deleteDoc(LOCKER(locker)); }
+async function dbDelete(locker){
+  const id = padId(locker);
+  await deleteDoc(LOCKER(id));
+}
 async function dbFindByUID(uid){
   const qs = await getDocs(query(LOCKERS(), where("uid","==",uid)));
   if (qs.empty) return null;
   const first = qs.docs[0]; return first.data().locker ?? Number(first.id);
 }
-async function dbCreateRange001to130(){
-  const batch = writeBatch(db);
-  for(let n=1;n<=130;n++){
-    const id = String(n).padStart(3,"0");
-    batch.set(LOCKER(id), { locker:Number(id), uid:null, updatedAt:serverTimestamp() }, { merge:true });
-  }
-  await batch.commit();
-}
 
 /* ===== Realtime ===== */
 function startRealtime(){
-  onSnapshot(LOCKERS(), snap=>{
-    state.map = snap.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
+  onSnapshot(query(LOCKERS(), orderBy("locker")), snap=>{
+    state.map = snap.docs.map(d=>({ locker:Number((d.data()?.locker) ?? d.id), ...(d.data()||{}) }));
     saveLocal(); renderCards();
   });
 }
@@ -327,13 +334,15 @@ onAuthStateChanged(auth, async (user)=>{
     state.isAdmin = d.exists();
   }
   roleStatus.textContent = state.isAdmin ? "• Admin" : "";
-  setAuthUI(state.isAuthed);   // <-- affiche les outils
+  setAuthUI(state.isAuthed);
   renderCards();
 });
 
-/* ===== Admin as cards ===== */
+/* ===== Admin as cards (scan + save/delete corrects) ===== */
 const cards = document.getElementById("cards");
 const search = document.getElementById("search");
+let scanTargetInput = null; // si défini, le prochain QR décodé remplit cet input puis stoppe la caméra
+
 function renderCards(){
   const q = (search?.value||"").toLowerCase();
   const rows = state.map.slice().sort((a,b)=>a.locker-b.locker)
@@ -345,17 +354,25 @@ function renderCards(){
     card.className = "acard";
     card.innerHTML = `
       <div class="row" style="justify-content:space-between;gap:12px">
-        <div style="flex:0 0 120px"><div class="lbl">Casier</div><input class="input locker" value="${String(r.locker).padStart(3,'0')}" ${state.isAuthed?"":"disabled"} /></div>
-        <div style="flex:1"><div class="lbl">UID</div><input class="input uid" value="${r.uid||""}" placeholder="${state.isAuthed?'Scanner…':'Connecte-toi pour éditer'}" ${state.isAuthed?"":"disabled"} /></div>
+        <div style="flex:0 0 120px">
+          <div class="lbl">Casier</div>
+          <input class="input locker" value="${String(r.locker).padStart(3,'0')}" ${state.isAuthed?"":"disabled"} />
+        </div>
+        <div style="flex:1">
+          <div class="lbl">UID</div>
+          <input class="input uid" value="${r.uid||""}" placeholder="${state.isAuthed?'Scanner… (clavier ou 📷)':'Connecte-toi pour éditer'}" ${state.isAuthed?"":"disabled"} />
+        </div>
       </div>
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:6px">
-          <button class="btn inline" data-act="scan" ${state.isAuthed?"":"disabled"}>Scanner ici</button>
-          <button class="btn inline danger" data-act="clear" ${state.isAuthed?"":"disabled"}>Vider</button>
+          <button class="btn inline" data-act="scan-kb" ${state.isAuthed?"":"disabled"}>Scanner (clavier)</button>
+          <button class="btn inline" data-act="scan-cam" ${state.isAuthed?"":"disabled"}>📷 Scanner (caméra)</button>
+          <button class="btn inline ghost" data-act="clear" ${state.isAuthed?"":"disabled"}>Vider UID</button>
         </div>
         <div class="row" style="gap:6px">
-          <button class="btn inline accent" data-act="save" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Action en base réservée aux admins'}">💾 Enregistrer</button>
-          <button class="btn inline danger" data-act="del" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Action en base réservée aux admins'}">🗑️ Supprimer</button>
+          <button class="btn inline accent" data-act="save" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Écriture en base = admin'}">💾 Enregistrer</button>
+          <button class="btn inline danger" data-act="del" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Suppression en base = admin'}">🗑️ Supprimer</button>
+          <button class="btn inline" data-act="remove-local" ${state.isAuthed && !state.isAdmin ? "" : "style='display:none'"}>🧹 Retirer (local)</button>
         </div>
       </div>`;
     cards.appendChild(card);
@@ -363,44 +380,79 @@ function renderCards(){
     const lockerEl = card.querySelector(".locker");
     const uidEl = card.querySelector(".uid");
 
-    card.querySelector('[data-act="scan"]').onclick = ()=>{
+    // Scanner clavier (douchette)
+    card.querySelector('[data-act="scan-kb"]').onclick = ()=>{
       if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
       uidEl.focus(); uidEl.value="";
       const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value = normalize(uidEl.value); document.removeEventListener("keydown",handler,true);} };
       document.addEventListener("keydown", handler, true);
     };
+
+    // Scanner caméra → remplit l'UID de cette carte
+    card.querySelector('[data-act="scan-cam"]').onclick = async ()=>{
+      if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
+      scanTargetInput = uidEl;
+      if(!cameraRunning) await startCamera(); // lance la caméra si nécessaire
+    };
+
+    // Vider UID
     card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAuthed) uidEl.value=""; };
 
+    // Enregistrer (upsert) — pas de doublon grâce à padId()
     card.querySelector('[data-act="save"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-      if(!state.isAdmin) return alert("Cette action écrit en base et est réservée aux admins.");
-      const L = Number(lockerEl.value);
+      if(!state.isAdmin) return alert("Écriture en base réservée aux admins.");
+      const Lraw = lockerEl.value; const Lnum = Number(Lraw);
+      if(!Lnum) return alert("Numéro de casier invalide.");
       const U = normalize(uidEl.value) || null;
-      if(!L) return alert("Numéro de casier invalide.");
-      try{ await dbUpsert(L, U); }catch(e){ alert("Erreur: "+(e.message||e)); }
+      try{ await dbUpsert(Lnum, U); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
+
+    // Supprimer (base) — admin
     card.querySelector('[data-act="del"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-      if(!state.isAdmin) return alert("Suppression réservée aux admins.");
-      if(!confirm("Supprimer cette ligne ?")) return;
+      if(!state.isAdmin) return alert("Suppression en base réservée aux admins. Utilise ‘Retirer (local)’.");
+      if(!confirm("Supprimer ce casier en base ?")) return;
       try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
+
+    // Retirer (local) — pour les non-admins : enlève de la vue (cache local), sans toucher la base
+    const removeLocalBtn = card.querySelector('[data-act="remove-local"]');
+    if (removeLocalBtn){
+      removeLocalBtn.onclick = ()=>{
+        const Lnum = Number(lockerEl.value);
+        state.map = state.map.filter(x => Number(x.locker)!==Lnum);
+        saveLocal(); renderCards();
+        alert("Ligne retirée localement (non persistée).");
+      };
+    }
   });
 }
 search?.addEventListener("input", renderCards);
 
 document.getElementById("btn-add-card").onclick = ()=>{
   if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-  state.map.push({ locker:0, uid:"" }); renderCards();
+  // Ajout local uniquement ; l'enregistrement poussera en base si admin
+  state.map.push({ locker:0, uid:"" }); saveLocal(); renderCards();
 };
 document.getElementById("btn-create-001-130").onclick = async ()=>{
   if(!state.isAuthed) return alert("Connecte-toi d’abord.");
   if(!state.isAdmin) return alert("Création en base réservée aux admins.");
   if(!confirm("Créer/mettre à jour les casiers 001 → 130 (UID vides) ?")) return;
-  try{ await dbCreateRange001to130(); alert("Casiers 001→130 créés/rafraîchis."); }catch(e){ alert("Erreur: "+(e.message||e)); }
+  try{
+    const batch = writeBatch(db);
+    for(let n=1;n<=130;n++){
+      const id = padId(n);
+      batch.set(LOCKER(id), { locker:n, uid:null, updatedAt:serverTimestamp() }, { merge:true });
+    }
+    await batch.commit();
+    alert("Casiers 001→130 créés/rafraîchis.");
+  }catch(e){ alert("Erreur: "+(e.message||e)); }
 };
+/* Drawer shortcuts */
+document.getElementById("drawer-create-001-130").onclick = ()=> document.getElementById("btn-create-001-130").click();
 
-/* ===== Import / Export (local cache) & Drawer binds ===== */
+/* ===== Import / Export (local cache) ===== */
 const area = document.getElementById("import-area");
 function downloadText(filename, text){
   const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
@@ -436,21 +488,13 @@ document.getElementById("btn-export-json").onclick = exportJSON;
 document.getElementById("btn-export-csv").onclick = exportCSV;
 document.getElementById("btn-import-json").onclick = importJSON;
 document.getElementById("btn-import-csv").onclick = importCSV;
-/* Drawer shortcuts */
 document.getElementById("drawer-export-json").onclick = exportJSON;
 document.getElementById("drawer-export-csv").onclick = exportCSV;
 document.getElementById("drawer-import-json").onclick = importJSON;
 document.getElementById("drawer-import-csv").onclick = importCSV;
-document.getElementById("drawer-create-001-130").onclick = async ()=>{
-  if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-  if(!state.isAdmin) return alert("Action réservée aux admins.");
-  if(!confirm("Créer/mettre à jour 001 → 130 ?")) return;
-  try{ await dbCreateRange001to130(); alert("OK"); }catch(e){ alert("Erreur: "+(e.message||e)); }
-};
 
 /* ===== Kiosk – scan clavier ===== */
 const hiddenInput = document.getElementById("hidden-capture");
-const kioskBox = document.getElementById("kiosk-box");
 let buffer="";
 function focusCapture(){ hiddenInput.focus(); }
 hiddenInput.addEventListener("keydown",(e)=>{
@@ -464,62 +508,196 @@ focusCapture();
 async function onScan(raw){
   const token = normalize(raw);
   if(!token || token.length<3) return;
+
+  // Si on vise un champ UID dans l'admin, on le remplit puis on coupe la caméra
+  if (scanTargetInput){
+    scanTargetInput.value = token;
+    if (navigator.vibrate) navigator.vibrate(60);
+    // fin du mode ciblé
+    scanTargetInput = null;
+    // ne pas afficher sur Kiosk dans ce cas
+    await stopCamera();
+    return;
+  }
+
+  // Sinon, mode Kiosk : affiche le n° de casier
   const row = state.map.find(r => (r.uid||"") === token);
   if (row){ showLocker(row.locker); return; }
   try{ const locker = await dbFindByUID(token); showLocker(locker); }catch{ showLocker(null); }
 }
 
-/* ===== Caméra iOS/Android (PWA A2HS) — warm-up + ZXing + standalone tweaks ===== */
+/* ===== Caméra iOS/Android — robuste (BarcodeDetector → ZXing → jsQR) ===== */
 const video = document.getElementById("qr-video");
 const camDot = document.getElementById("cam-dot");
 const camLabel = document.getElementById("cam-label");
 const fabCamera = document.getElementById("fab-camera");
 const camRestartBtn = document.getElementById("cam-restart");
 
-let cameraRunning=false, zxingReader=null, zxingControls=null;
+let cameraRunning = false;
+let stream = null;
+let stopDecoder = null;
 
 function setCamStatus(kind,msg){
-  camDot.className="dot "+(kind||"warn"); camLabel.textContent="Caméra : "+(msg||"");
-  if (cameraRunning){ fabCamera.textContent="⏹️ Arrêter caméra"; fabCamera.classList.add("alt"); fabCamera.setAttribute("aria-pressed","true"); }
-  else { fabCamera.textContent="📷 Activer caméra"; fabCamera.classList.remove("alt"); fabCamera.setAttribute("aria-pressed","false"); }
+  camDot.className = "dot " + (kind||"warn");
+  camLabel.textContent = "Caméra : " + (msg||"");
+  if (cameraRunning){
+    fabCamera.textContent="⏹️ Arrêter caméra";
+    fabCamera.classList.add("alt");
+    fabCamera.setAttribute("aria-pressed","true");
+  } else {
+    fabCamera.textContent="📷 Activer caméra";
+    fabCamera.classList.remove("alt");
+    fabCamera.setAttribute("aria-pressed","false");
+  }
 }
 function showCamError(e){
-  const name=e?.name||"", msg=e?.message||String(e), framed=(window.top!==window.self);
-  let extra=""; if(/NotAllowed|denied|Permission/i.test(name+msg)) extra=" • Réglages > Safari/Chrome → Appareil photo : ‘Autoriser / Demander’.";
-  if(framed) extra+=" • Dans Wix, intégrer en “Site externe (URL)” avec allow=\"camera\".";
+  const name=e?.name||"", msg=e?.message||String(e);
+  let extra=" • Réglages > Safari/Chrome → Appareil photo : ‘Autoriser/Demander’.";
+  if (window.top !== window.self) extra += " • Dans Wix, mettre allow=\"camera\" sur l’iframe.";
   document.getElementById("kiosk-error").textContent = `Caméra indisponible (${name||"Erreur"}): ${msg}${extra}`;
+  console.error("Camera error:", e);
   setCamStatus("err","erreur");
 }
-async function requestCameraPermission(){
-  const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false });
-  s.getTracks().forEach(t=>t.stop());
+
+async function ensureZXing(){
+  if (window.ZXingBrowser?.BrowserMultiFormatReader) return true;
+  const sources = [
+    "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js",
+    "https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js",
+    "https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"
+  ];
+  for (const src of sources){
+    try{
+      await new Promise((resolve, reject)=>{
+        const s=document.createElement("script");
+        s.src=src; s.async=true; s.onload=resolve; s.onerror=reject;
+        document.head.appendChild(s);
+      });
+      if (window.ZXingBrowser?.BrowserMultiFormatReader) return true;
+    }catch{/* essaye suivant */}
+  }
+  return false;
 }
-async function startZXing(){
-  const hasBrowser = !!(window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader);
-  if(!hasBrowser) throw new Error("ZXing non chargé.");
-  const { BrowserMultiFormatReader } = window.ZXingBrowser;
-  zxingReader = new BrowserMultiFormatReader();
-  const onResult = (result)=>{ if(result?.getText){ const text=result.getText(); if(text){ onScan(text); if(navigator.vibrate) navigator.vibrate(60); } } };
-  zxingControls = await zxingReader.decodeFromConstraints({ video:{ facingMode:{ ideal:"environment" } } }, video, onResult);
-  const stream = video.srcObject;
-  if(stream){ stream.getVideoTracks().forEach(tr => tr.onended = ()=>{ cameraRunning=false; setCamStatus("warn","arrêtée"); }); }
+
+async function warmUpPermission(){
+  const gum = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ ideal:"environment" }, width:{ideal:1280}, height:{ideal:720} },
+    audio:false
+  });
+  gum.getTracks().forEach(t=>t.stop());
 }
-async function stopCamera(){
-  try{ if(zxingControls?.stop) zxingControls.stop(); if(zxingReader?.reset) zxingReader.reset(); }catch{}
-  const s=video.srcObject; if(s){ s.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
-  zxingReader=null; zxingControls=null; cameraRunning=false; setCamStatus("warn","arrêtée");
-}
+
 async function startCamera(){
   try{
-    setCamStatus("warn","permission…"); await requestCameraPermission();
-    setCamStatus("warn","démarrage…"); await startZXing();
-    cameraRunning=true; setCamStatus("ok","opérationnelle");
-  }catch(e){ cameraRunning=false; showCamError(e); }
-}
-fabCamera.onclick = async ()=>{ if(cameraRunning) await stopCamera(); else await startCamera(); };
-camRestartBtn.onclick = ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); };
+    setCamStatus("warn","permission…");
+    await warmUpPermission();
 
-// Reprise propre au retour d’arrière-plan (A2HS)
+    setCamStatus("warn","démarrage…");
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ ideal:"environment" }, width:{ideal:1280}, height:{ideal:720} },
+      audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    // 1) Décodeur natif
+    if ("BarcodeDetector" in window){
+      const formats = await (window.BarcodeDetector.getSupportedFormats?.()||[]);
+      if (!formats.length || formats.includes("qr_code")){
+        stopDecoder = startBarcodeDetectorLoop(video);
+        cameraRunning = true; setCamStatus("ok","opérationnelle (natif)");
+        return;
+      }
+    }
+    // 2) ZXing
+    const ok = await ensureZXing();
+    if (ok){
+      stopDecoder = await startZXing(video);
+      cameraRunning = true; setCamStatus("ok","opérationnelle (ZXing)");
+      return;
+    }
+    // 3) jsQR
+    if (window.jsQR){
+      stopDecoder = startJsQRLoop(video);
+      cameraRunning = true; setCamStatus("ok","opérationnelle (jsQR)");
+      return;
+    }
+    throw new Error("Aucun décodeur dispo (BarcodeDetector/ZXing/jsQR).");
+  }catch(e){
+    cameraRunning = false;
+    await stopCamera();
+    showCamError(e);
+  }
+}
+
+async function stopCamera(){
+  try{ if (stopDecoder) { stopDecoder(); stopDecoder=null; } }catch{}
+  try{ if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }catch{}
+  try{ if (video){ video.pause(); video.srcObject=null; } }catch{}
+  cameraRunning=false;
+  setCamStatus("warn","arrêtée");
+}
+
+function startBarcodeDetectorLoop(videoEl){
+  const detector = new window.BarcodeDetector({ formats:["qr_code"] });
+  let stopped=false;
+  async function tick(){
+    if (stopped) return;
+    try{
+      const res = await detector.detect(videoEl);
+      if (res && res.length){
+        const txt = res[0].rawValue || res[0].rawValue || "";
+        if (txt){ onScan(txt); if (scanTargetInput){ /* si ciblé → stop */ await stopCamera(); } if (navigator.vibrate) navigator.vibrate(60); }
+      }
+    }catch{}
+    finally{ if (!stopped) requestAnimationFrame(tick); }
+  }
+  requestAnimationFrame(tick);
+  return ()=>{ stopped=true; };
+}
+
+async function startZXing(videoEl){
+  const { BrowserMultiFormatReader } = window.ZXingBrowser || {};
+  if (!BrowserMultiFormatReader) throw new Error("ZXing non chargé");
+  const reader = new BrowserMultiFormatReader();
+  const controls = await reader.decodeFromConstraints(
+    { video:{ facingMode:{ ideal:"environment" } } },
+    videoEl,
+    async (result)=>{ if(result?.getText){ const t=result.getText(); if(t){ onScan(t); if (scanTargetInput){ await stopCamera(); } if(navigator.vibrate) navigator.vibrate(60); } } }
+  );
+  return ()=>{ try{ controls.stop(); reader.reset(); }catch{} };
+}
+
+function startJsQRLoop(videoEl){
+  const cvs=document.createElement("canvas");
+  const ctx=cvs.getContext("2d",{willReadFrequently:true});
+  let stopped=false;
+
+  function frame(){
+    if (stopped) return;
+    const w=videoEl.videoWidth||640, h=videoEl.videoHeight||480;
+    if (w && h){
+      cvs.width=w; cvs.height=h;
+      ctx.drawImage(videoEl,0,0,w,h);
+      const imgData = ctx.getImageData(0,0,w,h);
+      const res = window.jsQR(imgData.data, w, h, { inversionAttempts:"attemptBoth" });
+      if (res?.data){
+        onScan(res.data);
+        if (scanTargetInput){ stopCamera(); }
+        if (navigator.vibrate) navigator.vibrate(60);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  return ()=>{ stopped=true; };
+}
+
+/* Camera buttons */
+fabCamera.onclick = async ()=>{ if (cameraRunning) await stopCamera(); else await startCamera(); };
+camRestartBtn?.addEventListener("click", ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); });
+
+/* Reprise après retour d’arrière-plan (PWA A2HS) */
 document.addEventListener("visibilitychange", ()=>{
   if (document.visibilityState === "visible" && cameraRunning){
     stopCamera().then(startCamera).catch(()=>{});
@@ -545,7 +723,7 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-/* ===== Standalone detection (A2HS) ===== */
+/* ===== Standalone detection ===== */
 function isStandalone(){
   return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
 }
