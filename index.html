@@ -12,8 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
-
-<!-- Fallback QR decoder -->
+<!-- Fallback QR decoder (no ZXing) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 <style>
@@ -79,7 +78,7 @@ body{
 .lbl{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 
-/* QR video: doit être rendu (iOS) : hors écran mais dimensions réelles */
+/* QR video: rendu requis (iOS) : hors écran mais dimensions réelles */
 #qr-video{
   position:fixed; left:-9999px; top:auto;
   width:160px; height:120px; opacity:0.01;
@@ -254,7 +253,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v7";
+const LS_KEY="hedo_lockers_cache_v8";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -262,7 +261,7 @@ const normalize = (s)=> (s||"").trim();
 const showLocker = (locker)=> document.getElementById("kiosk-content").innerHTML =
   locker ? `<div class="note">Votre casier est le</div><div class="big">#${String(locker).padStart(3,"0")}</div>` : `<span class="note">Aucun casier trouvé.</span>`;
 
-/* PATCH visibility: show tools after login */
+/* Visibilité des outils après login */
 function setAuthUI(isAuthed){
   document.querySelectorAll("[data-authonly]").forEach(el=>{
     el.classList.toggle("show", !!isAuthed);
@@ -276,13 +275,11 @@ const ADMINS  = (uid)=> doc(db,"admins",String(uid));
 const padId = (n)=> {
   const num = Number(n);
   if (Number.isNaN(num) || num < 0) return String(n||"");
-  // Canonique sur 3 chiffres (001..999). Ajuste si tu veux 4 chiffres.
-  return String(num).padStart(3,"0");
+  return String(num).padStart(3,"0"); // 001..999
 };
 
 async function dbUpsert(locker, uid){
-  // ID doc canonique pour éviter les doublons "1" vs "001"
-  const id = padId(locker);
+  const id = padId(locker); // évite 1 vs 001
   await setDoc(LOCKER(id), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true });
 }
 async function dbDelete(locker){
@@ -338,10 +335,10 @@ onAuthStateChanged(auth, async (user)=>{
   renderCards();
 });
 
-/* ===== Admin as cards (scan + save/delete corrects) ===== */
+/* ===== Admin as cards (scan + save/delete + local remove) ===== */
 const cards = document.getElementById("cards");
 const search = document.getElementById("search");
-let scanTargetInput = null; // si défini, le prochain QR décodé remplit cet input puis stoppe la caméra
+let scanTargetInput = null; // si défini, le prochain QR remplit cet input
 
 function renderCards(){
   const q = (search?.value||"").toLowerCase();
@@ -392,17 +389,17 @@ function renderCards(){
     card.querySelector('[data-act="scan-cam"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
       scanTargetInput = uidEl;
-      if(!cameraRunning) await startCamera(); // lance la caméra si nécessaire
+      if(!cameraRunning) await startCamera();
     };
 
     // Vider UID
     card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAuthed) uidEl.value=""; };
 
-    // Enregistrer (upsert) — pas de doublon grâce à padId()
+    // Enregistrer (upsert) — pas de doublon (padId)
     card.querySelector('[data-act="save"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi d’abord.");
       if(!state.isAdmin) return alert("Écriture en base réservée aux admins.");
-      const Lraw = lockerEl.value; const Lnum = Number(Lraw);
+      const Lnum = Number(lockerEl.value);
       if(!Lnum) return alert("Numéro de casier invalide.");
       const U = normalize(uidEl.value) || null;
       try{ await dbUpsert(Lnum, U); }catch(e){ alert("Erreur: "+(e.message||e)); }
@@ -416,7 +413,7 @@ function renderCards(){
       try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
 
-    // Retirer (local) — pour les non-admins : enlève de la vue (cache local), sans toucher la base
+    // Retirer (local) — pour non-admins
     const removeLocalBtn = card.querySelector('[data-act="remove-local"]');
     if (removeLocalBtn){
       removeLocalBtn.onclick = ()=>{
@@ -432,7 +429,6 @@ search?.addEventListener("input", renderCards);
 
 document.getElementById("btn-add-card").onclick = ()=>{
   if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-  // Ajout local uniquement ; l'enregistrement poussera en base si admin
   state.map.push({ locker:0, uid:"" }); saveLocal(); renderCards();
 };
 document.getElementById("btn-create-001-130").onclick = async ()=>{
@@ -509,24 +505,22 @@ async function onScan(raw){
   const token = normalize(raw);
   if(!token || token.length<3) return;
 
-  // Si on vise un champ UID dans l'admin, on le remplit puis on coupe la caméra
+  // Mode Admin ciblé : remplir l'UID du champ sélectionné
   if (scanTargetInput){
     scanTargetInput.value = token;
     if (navigator.vibrate) navigator.vibrate(60);
-    // fin du mode ciblé
     scanTargetInput = null;
-    // ne pas afficher sur Kiosk dans ce cas
     await stopCamera();
     return;
   }
 
-  // Sinon, mode Kiosk : affiche le n° de casier
+  // Mode Kiosk : affiche n° de casier
   const row = state.map.find(r => (r.uid||"") === token);
   if (row){ showLocker(row.locker); return; }
   try{ const locker = await dbFindByUID(token); showLocker(locker); }catch{ showLocker(null); }
 }
 
-/* ===== Caméra iOS/Android — robuste (BarcodeDetector → ZXing → jsQR) ===== */
+/* ===== Caméra — BarcodeDetector natif → jsQR fallback (sans ZXing) ===== */
 const video = document.getElementById("qr-video");
 const camDot = document.getElementById("cam-dot");
 const camLabel = document.getElementById("cam-label");
@@ -553,32 +547,13 @@ function setCamStatus(kind,msg){
 function showCamError(e){
   const name=e?.name||"", msg=e?.message||String(e);
   let extra=" • Réglages > Safari/Chrome → Appareil photo : ‘Autoriser/Demander’.";
-  if (window.top !== window.self) extra += " • Dans Wix, mettre allow=\"camera\" sur l’iframe.";
+  if (window.top !== window.self) extra += " • Si intégré (Wix), mettre allow=\"camera\" sur l’iframe.";
   document.getElementById("kiosk-error").textContent = `Caméra indisponible (${name||"Erreur"}): ${msg}${extra}`;
   console.error("Camera error:", e);
   setCamStatus("err","erreur");
 }
 
-async function ensureZXing(){
-  if (window.ZXingBrowser?.BrowserMultiFormatReader) return true;
-  const sources = [
-    "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js",
-    "https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js",
-    "https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"
-  ];
-  for (const src of sources){
-    try{
-      await new Promise((resolve, reject)=>{
-        const s=document.createElement("script");
-        s.src=src; s.async=true; s.onload=resolve; s.onerror=reject;
-        document.head.appendChild(s);
-      });
-      if (window.ZXingBrowser?.BrowserMultiFormatReader) return true;
-    }catch{/* essaye suivant */}
-  }
-  return false;
-}
-
+/* iOS/Android exigent un “geste utilisateur” → warm-up court */
 async function warmUpPermission(){
   const gum = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:"environment" }, width:{ideal:1280}, height:{ideal:720} },
@@ -587,6 +562,7 @@ async function warmUpPermission(){
   gum.getTracks().forEach(t=>t.stop());
 }
 
+/* Démarre la caméra + choisit un décodeur (natif ou jsQR) */
 async function startCamera(){
   try{
     setCamStatus("warn","permission…");
@@ -609,20 +585,15 @@ async function startCamera(){
         return;
       }
     }
-    // 2) ZXing
-    const ok = await ensureZXing();
-    if (ok){
-      stopDecoder = await startZXing(video);
-      cameraRunning = true; setCamStatus("ok","opérationnelle (ZXing)");
-      return;
-    }
-    // 3) jsQR
+
+    // 2) Fallback jsQR (canvas)
     if (window.jsQR){
       stopDecoder = startJsQRLoop(video);
       cameraRunning = true; setCamStatus("ok","opérationnelle (jsQR)");
       return;
     }
-    throw new Error("Aucun décodeur dispo (BarcodeDetector/ZXing/jsQR).");
+
+    throw new Error("Aucun décodeur dispo (BarcodeDetector/jsQR).");
   }catch(e){
     cameraRunning = false;
     await stopCamera();
@@ -638,6 +609,7 @@ async function stopCamera(){
   setCamStatus("warn","arrêtée");
 }
 
+/* Décodeur natif */
 function startBarcodeDetectorLoop(videoEl){
   const detector = new window.BarcodeDetector({ formats:["qr_code"] });
   let stopped=false;
@@ -646,8 +618,12 @@ function startBarcodeDetectorLoop(videoEl){
     try{
       const res = await detector.detect(videoEl);
       if (res && res.length){
-        const txt = res[0].rawValue || res[0].rawValue || "";
-        if (txt){ onScan(txt); if (scanTargetInput){ /* si ciblé → stop */ await stopCamera(); } if (navigator.vibrate) navigator.vibrate(60); }
+        const txt = res[0].rawValue || "";
+        if (txt){
+          handleDecodedText(txt);
+          if (navigator.vibrate) navigator.vibrate(60);
+          if (scanTargetInput){ await stopCamera(); }
+        }
       }
     }catch{}
     finally{ if (!stopped) requestAnimationFrame(tick); }
@@ -656,23 +632,11 @@ function startBarcodeDetectorLoop(videoEl){
   return ()=>{ stopped=true; };
 }
 
-async function startZXing(videoEl){
-  const { BrowserMultiFormatReader } = window.ZXingBrowser || {};
-  if (!BrowserMultiFormatReader) throw new Error("ZXing non chargé");
-  const reader = new BrowserMultiFormatReader();
-  const controls = await reader.decodeFromConstraints(
-    { video:{ facingMode:{ ideal:"environment" } } },
-    videoEl,
-    async (result)=>{ if(result?.getText){ const t=result.getText(); if(t){ onScan(t); if (scanTargetInput){ await stopCamera(); } if(navigator.vibrate) navigator.vibrate(60); } } }
-  );
-  return ()=>{ try{ controls.stop(); reader.reset(); }catch{} };
-}
-
+/* jsQR fallback */
 function startJsQRLoop(videoEl){
   const cvs=document.createElement("canvas");
   const ctx=cvs.getContext("2d",{willReadFrequently:true});
   let stopped=false;
-
   function frame(){
     if (stopped) return;
     const w=videoEl.videoWidth||640, h=videoEl.videoHeight||480;
@@ -682,9 +646,9 @@ function startJsQRLoop(videoEl){
       const imgData = ctx.getImageData(0,0,w,h);
       const res = window.jsQR(imgData.data, w, h, { inversionAttempts:"attemptBoth" });
       if (res?.data){
-        onScan(res.data);
-        if (scanTargetInput){ stopCamera(); }
+        handleDecodedText(res.data);
         if (navigator.vibrate) navigator.vibrate(60);
+        if (scanTargetInput){ stopCamera(); }
       }
     }
     requestAnimationFrame(frame);
@@ -693,7 +657,20 @@ function startJsQRLoop(videoEl){
   return ()=>{ stopped=true; };
 }
 
-/* Camera buttons */
+/* Routing du texte décodé */
+async function handleDecodedText(text){
+  const token = (text||"").trim();
+  if (!token) return;
+  if (scanTargetInput){
+    scanTargetInput.value = token; // remplit l'UID ciblé
+    return;
+  }
+  if (typeof onScan === "function"){
+    onScan(token); // mode kiosk
+  }
+}
+
+/* Boutons caméra */
 fabCamera.onclick = async ()=>{ if (cameraRunning) await stopCamera(); else await startCamera(); };
 camRestartBtn?.addEventListener("click", ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); });
 
