@@ -93,8 +93,9 @@ body{
 .fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
 @media(min-width:900px){.fab{bottom:20px}}
 
-/* Visibility helpers */
+/* Auth visibility helpers (PATCH) */
 [data-authonly]{display:none}
+[data-authonly].show{display:initial}
 </style>
 </head>
 <body>
@@ -247,7 +248,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v5";
+const LS_KEY="hedo_lockers_cache_v6";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -255,9 +256,11 @@ const normalize = (s)=> (s||"").trim();
 const showLocker = (locker)=> document.getElementById("kiosk-content").innerHTML =
   locker ? `<div class="note">Votre casier est le</div><div class="big">#${String(locker).padStart(3,"0")}</div>` : `<span class="note">Aucun casier trouvé.</span>`;
 
-/* Toggle UI helpers */
+/* PATCH visibility: show tools after login */
 function setAuthUI(isAuthed){
-  document.querySelectorAll("[data-authonly]").forEach(el=>{ el.style.display = isAuthed ? "" : "none"; });
+  document.querySelectorAll("[data-authonly]").forEach(el=>{
+    el.classList.toggle("show", !!isAuthed);
+  });
 }
 
 /* ===== Firestore DAO ===== */
@@ -324,7 +327,7 @@ onAuthStateChanged(auth, async (user)=>{
     state.isAdmin = d.exists();
   }
   roleStatus.textContent = state.isAdmin ? "• Admin" : "";
-  setAuthUI(state.isAuthed);
+  setAuthUI(state.isAuthed);   // <-- affiche les outils
   renderCards();
 });
 
@@ -488,7 +491,6 @@ function showCamError(e){
   setCamStatus("err","erreur");
 }
 async function requestCameraPermission(){
-  // iOS/Android standalone: gUM doit être déclenché par un geste utilisateur
   const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false });
   s.getTracks().forEach(t=>t.stop());
 }
@@ -543,12 +545,11 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-/* ===== Standalone detection (A2HS) — petits ajustements ===== */
+/* ===== Standalone detection (A2HS) ===== */
 function isStandalone(){
   return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
 }
 if (isStandalone()){
-  // Optionnel : petites optimisations UI en mode app
   document.body.classList.add("standalone");
 }
 </script>
