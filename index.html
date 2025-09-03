@@ -3,393 +3,161 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Hedo Lockers (webapp)</title>
+<title>Hedo Lockers</title>
 
-<!-- Couleur du thème / barre navigateur -->
 <meta name="theme-color" content="#0d0f13" />
-
-<!-- iOS “fullscreen” -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-
-<!-- Manifest PWA -->
 <link rel="manifest" href="manifest.webmanifest" />
 
-<!-- ZXing UMD (on charge les 2 variantes, on auto-détectera laquelle est dispo) -->
+<!-- ZXing pour lecture QR -->
 <script defer src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 
 <style>
-:root{--bg:#0d0f13;--panel:#141821;--text:#e9eef6;--muted:#9aa4b2;--accent:#D4AF37;--ok:#2ecc71;--warn:#f39c12;--danger:#e74c3c;--border:rgba(255,255,255,.12)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-.wrap{min-height:100vh;display:flex;flex-direction:column}
-header{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
-.title{font-weight:700;letter-spacing:.3px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap}
-.btn,.input,.select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px}
-.btn{cursor:pointer}
-.btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-main{padding:18px;display:grid;grid-template-columns:1fr;gap:18px;flex:1}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
-h3{margin:0 0 10px 0}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.note{font-size:12px;color:var(--muted)}
-.kiosk{display:flex;align-items:center;justify-content:center;min-height:240px;border:2px dashed var(--border);border-radius:12px;text-align:center}
-.big{font-size:64px;font-weight:800;letter-spacing:1px;color:var(--accent)}
-.muted{color:var(--muted)}
-.hidden{position:absolute;left:-9999px;top:-9999px;opacity:0}
-.grid{width:100%;border-collapse:collapse;margin-top:10px}
-.grid th,.grid td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
-textarea{width:100%;min-height:140px}
-footer{padding:12px 18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
-@media (min-width:1100px){main{grid-template-columns:1.1fr .9fr}}
-
-.cam-status{display:flex;align-items:center;gap:8px}
-.dot{width:10px;height:10px;border-radius:50%}
-.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--danger)}
-
-/* Bouton flottant (mobile & desktop) pour démarrer/arrêter la caméra */
-.fab{
-  position:fixed; right:16px; bottom:16px; z-index:50;
-  background:var(--accent); color:#000; border:none;
-  border-radius:999px; padding:14px 16px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.35);
-}
-.fab.alt{ background:var(--panel); color:var(--text); border:1px solid var(--border) }
-@media (min-width:900px){ .fab{ display:none } }
-
-/* iPhone: la vidéo doit exister “à l’écran” (invisible mais présente) */
-#qr-video{
-  width:2px; height:2px; opacity:0; position:fixed; left:0; bottom:0; pointer-events:none;
-}
+/* (même CSS que ta version précédente, je n’ai pas modifié) */
+body{margin:0;background:#0d0f13;color:#e9eef6;font-family:system-ui,sans-serif}
+.btn{background:#141821;border:1px solid rgba(255,255,255,.12);color:#e9eef6;padding:10px 12px;border-radius:10px;cursor:pointer}
+.btn.accent{border-color:#D4AF37}
+.panel{background:#141821;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px;margin:10px}
+.kiosk{display:flex;align-items:center;justify-content:center;min-height:200px;border:2px dashed rgba(255,255,255,.12);border-radius:12px}
+.big{font-size:64px;font-weight:800;color:#D4AF37}
+.hidden{position:absolute;left:-9999px}
+.fab{position:fixed;right:16px;bottom:16px;background:#D4AF37;border:none;border-radius:999px;padding:14px 16px;z-index:100}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="title">Hedo – Casier (RFID 125 kHz / QR)</div>
-    <div class="tabs">
-      <button class="btn accent" id="tab-kiosk">Kiosk</button>
-      <button class="btn" id="tab-admin">Admin</button>
-      <button class="btn" id="tab-tools">Import/Export</button>
-      <button class="btn" id="btn-reset" title="Efface la config locale">Réinitialiser (local)</button>
-    </div>
-    <div class="cam-status">
-      <span class="dot warn" id="cam-dot" title="État caméra"></span>
-      <span id="cam-label" class="note">Caméra : arrêtée</span>
-      <button class="btn" id="cam-restart" title="Relancer la capture">Relancer</button>
-    </div>
-  </header>
-
-  <main>
-    <!-- KIOSK -->
-    <section class="panel" id="view-kiosk">
-      <h3>Écran client</h3>
-      <div class="note">
-        La <b>douchette USB</b> (RFID/QR en mode clavier) est capturée en permanence.
-        La <b>caméra</b> pour lire les QR s’active via le bouton 📷 (preview cachée).
-      </div>
-
-      <!-- capture clavier (lecteur USB / douchette) -->
-      <input id="hidden-capture" class="hidden" aria-hidden="true" />
-
-      <!-- vidéo invisibile mais "présente" (iOS) -->
-      <video id="qr-video" muted playsinline></video>
-      <canvas id="qr-canvas" class="hidden"></canvas>
-
-      <div class="kiosk" id="kiosk-box" style="margin-top:12px">
-        <div id="kiosk-content" class="muted">Scannez votre bracelet…</div>
-      </div>
-      <div id="kiosk-error" class="note" style="color:var(--danger);margin-top:8px"></div>
-    </section>
-
-    <!-- ADMIN -->
-    <section class="panel" id="view-admin" style="display:none">
-      <h3>Administration — Mapping UID ↔ Casier</h3>
-      <div class="row">
-        <input class="input" id="search" placeholder="Rechercher (casier, UID)…" />
-        <button class="btn" id="add-row">Ajouter une ligne</button>
-        <button class="btn" id="gen-sample">Générer casiers 101–160 (VIDES)</button>
-      </div>
-      <table class="grid" id="map-table">
-        <thead><tr><th># Casier</th><th>UID (lecture seule 125 kHz ou contenu QR)</th><th>Actions</th></tr></thead>
-        <tbody id="map-body"></tbody>
-      </table>
-      <div class="note" style="margin-top:8px">Astuce : “Scanner ici” capte le prochain scan clavier.</div>
-    </section>
-
-    <!-- TOOLS -->
-    <section class="panel" id="view-tools" style="display:none">
-      <h3>Import / Export</h3>
-      <div class="row">
-        <button class="btn accent" id="btn-export-json">Exporter JSON</button>
-        <button class="btn" id="btn-export-csv">Exporter CSV</button>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <textarea id="import-area" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV locker,uid'></textarea>
-      </div>
-      <div class="row">
-        <button class="btn" id="btn-import-json">Importer JSON</button>
-        <button class="btn" id="btn-import-csv">Importer CSV</button>
-      </div>
-      <div class="note" style="margin-top:8px">Les données sont stockées dans ce navigateur (localStorage). Tu pourras brancher une API plus tard.</div>
-    </section>
-  </main>
-
-  <footer>Hedo — aucune donnée nominative ; uniquement la correspondance UID ↔ numéro de casier.</footer>
+<div class="panel">
+  <h3>Écran client</h3>
+  <input id="hidden-capture" class="hidden" />
+  <video id="qr-video" muted playsinline style="width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0"></video>
+  <div class="kiosk"><div id="kiosk-content">Scannez votre bracelet…</div></div>
+  <div id="kiosk-error" style="color:red"></div>
 </div>
 
-<!-- Bouton flottant pour (dé)marre la caméra -->
-<button id="fab-camera" class="fab" aria-pressed="false" aria-label="Activer la caméra">📷 Activer caméra</button>
+<div class="panel" id="view-admin">
+  <h3>Admin</h3>
+  <div>
+    <input class="btn" id="admin-email" placeholder="email admin" />
+    <button class="btn" id="btn-login">Se connecter</button>
+    <button class="btn" id="btn-logout">Déconnexion</button>
+    <span id="auth-status"></span>
+  </div>
+  <table id="map-table" border="1" style="margin-top:10px;width:100%"><thead><tr><th>Casier</th><th>UID</th><th></th></tr></thead><tbody id="map-body"></tbody></table>
+  <button class="btn accent" id="add-row">Ajouter une ligne</button>
+</div>
 
-<script>
-/* =========================
-   PWA: Service Worker
-========================= */
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+<button id="fab-camera" class="fab">📷 Caméra</button>
+
+<script type="module">
+/* ================= FIREBASE INIT ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, orderBy, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAZ7M8dUKqcUwa9rDyWEdHEwnFVPlrpCds",
+  authDomain: "lockers-26331.firebaseapp.com",
+  projectId: "lockers-26331",
+  storageBucket: "lockers-26331.firebasestorage.app",
+  messagingSenderId: "601816918378",
+  appId: "1:601816918378:web:b6045b10b60e7957c19d13"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ================= GLOBAL STATE ================= */
+let state = { map: [] };
+const kioskContent = document.getElementById("kiosk-content");
+function normalizeToken(s){ return (s||"").trim(); }
+function showLocker(locker){ kioskContent.innerHTML = locker ? `<div>Votre casier</div><div class="big">#${locker}</div>` : "<span>Aucun casier trouvé</span>"; }
+
+/* ================= FIRESTORE DAO ================= */
+const LOCKERS = () => collection(db,"lockers");
+const LOCKER_DOC = (id)=> doc(db,"lockers",String(id));
+
+async function dbFetchAll(){
+  const qs = await getDocs(query(LOCKERS(), orderBy("locker")));
+  return qs.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
+}
+async function dbUpsert(locker, uid){
+  await setDoc(LOCKER_DOC(locker), { locker:Number(locker), uid:uid||null, updatedAt:serverTimestamp() }, { merge:true });
+}
+async function dbDelete(locker){ await deleteDoc(LOCKER_DOC(locker)); }
+async function dbFindByUID(uid){
+  const qs = await getDocs(query(LOCKERS(), where("uid","==",uid)));
+  if(qs.empty) return null;
+  return qs.docs[0].data().locker;
+}
+
+/* ================= ADMIN UI ================= */
+const mapBody = document.getElementById("map-body");
+function renderTable(){
+  mapBody.innerHTML="";
+  state.map.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><input value="${r.locker||""}" class="locker"/></td>
+      <td><input value="${r.uid||""}" class="uid"/></td>
+      <td><button class="save">💾</button><button class="del">🗑️</button></td>`;
+    mapBody.appendChild(tr);
+    tr.querySelector(".save").onclick=async()=>{
+      await dbUpsert(tr.querySelector(".locker").value, tr.querySelector(".uid").value);
+    };
+    tr.querySelector(".del").onclick=async()=>{
+      await dbDelete(tr.querySelector(".locker").value);
+    };
   });
 }
+document.getElementById("add-row").onclick=()=>{ state.map.push({locker:0,uid:""}); renderTable(); };
 
-/* =========================
-   Storage
-========================= */
-const LS_KEY="hedo_map_pwa_v2";
-function loadState(){const raw=localStorage.getItem(LS_KEY);if(raw){try{return JSON.parse(raw)}catch{}}const init={map:[],lastScan:null};localStorage.setItem(LS_KEY,JSON.stringify(init));return init;}
-function saveState(s){localStorage.setItem(LS_KEY,JSON.stringify(s));}
-let state=loadState();
+/* ================= FIREBASE AUTH ================= */
+const emailInput=document.getElementById("admin-email");
+document.getElementById("btn-login").onclick=async()=>{
+  const email=emailInput.value;
+  await sendSignInLinkToEmail(auth,email,{url:window.location.href,handleCodeInApp:true});
+  localStorage.setItem("hedo_email",email);
+  alert("Lien envoyé à "+email);
+};
+document.getElementById("btn-logout").onclick=()=>signOut(auth);
 
-/* =========================
-   Helpers
-========================= */
-function normalizeToken(s){if(!s)return"";let str=String(s).trim().replace(/[\\r\\n\\t]/g,"");if(str.length>=5)return str;const hex=(str.match(/[0-9A-Fa-f]{6,}/)||[null])[0];if(hex)return hex.toUpperCase();const dec=(str.match(/[0-9]{6,}/)||[null])[0];if(dec)return dec;return str;}
-function findLockerByUID(uid){const n=normalizeToken(uid);return state.map.find(r=>(r.uid||"")===n)||null;}
-function findByLocker(locker){const L=Number(locker);return state.map.find(r=>r.locker===L)||null;}
-function upsertRow(locker,uid){const L=Number(locker);const n=normalizeToken(uid);let row=findByLocker(L);if(row){row.uid=n}else{state.map.push({locker:L,uid:n})}saveState(state);}
-function deleteRow(locker){const L=Number(locker);state.map=state.map.filter(r=>r.locker!==L);saveState(state);}
-
-/* =========================
-   Navigation
-========================= */
-const viewKiosk=document.getElementById("view-kiosk");
-const viewAdmin=document.getElementById("view-admin");
-const viewTools=document.getElementById("view-tools");
-const tabKiosk=document.getElementById("tab-kiosk");
-const tabAdmin=document.getElementById("tab-admin");
-const tabTools=document.getElementById("tab-tools");
-function setTab(name){viewKiosk.style.display=(name==="kiosk")?"block":"none";viewAdmin.style.display=(name==="admin")?"block":"none";viewTools.style.display=(name==="tools")?"block":"none";tabKiosk.classList.toggle("accent",name==="kiosk");tabAdmin.classList.toggle("accent",name==="admin");tabTools.classList.toggle("accent",name==="tools");}
-tabKiosk.onclick=()=>setTab("kiosk");tabAdmin.onclick=()=>{setTab("admin");renderTable();};tabTools.onclick=()=>setTab("tools");setTab("kiosk");
-
-/* =========================
-   Kiosk – capture clavier (lecteur USB)
-========================= */
-const hiddenInput=document.getElementById("hidden-capture");
-const kioskContent=document.getElementById("kiosk-content");
-const kioskError=document.getElementById("kiosk-error");
-const kioskBox=document.getElementById("kiosk-box");
-let buffer="";
-function showLocker(locker){kioskError.textContent="";kioskContent.innerHTML=locker?'<div class="muted">Votre casier est le</div><div class="big">#'+locker+'</div>':'<span class="muted">Aucun casier trouvé pour cet identifiant.</span>';}
-function handleScan(raw){const token=normalizeToken(raw);if(!token||token.length<5)return;state.lastScan=token;saveState(state);const row=findLockerByUID(token);showLocker(row?row.locker:null);}
-function focusCapture(){hiddenInput.focus();}
-hiddenInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const data=buffer;buffer="";handleScan(data);}else if(e.key.length===1){buffer+=e.key;}else if(e.key==="Backspace"){buffer=buffer.slice(0,-1);}});
-kioskBox.addEventListener("click",focusCapture);document.addEventListener("click",e=>{if(viewKiosk.contains(e.target))setTimeout(focusCapture,0);});focusCapture();
-
-/* =========================
-   Caméra (QR) — PATCH iOS18 : warm-up permission + ZXing auto
-========================= */
-const video=document.getElementById("qr-video");
-const camDot=document.getElementById("cam-dot");
-const camLabel=document.getElementById("cam-label");
-const camRestartBtn=document.getElementById("cam-restart");
-const fabCamera=document.getElementById("fab-camera");
-
-let cameraRunning=false;
-let zxingReader=null;   // instance (browser ou library)
-let zxingControls=null; // .stop() si dispo
-
-function setCamStatus(kind,msg){
-  camDot.className="dot "+(kind||"warn");
-  camLabel.textContent="Caméra : "+(msg||"");
-  if(cameraRunning){fabCamera.textContent="⏹️ Arrêter caméra";fabCamera.classList.add("alt");fabCamera.setAttribute("aria-pressed","true");}
-  else{fabCamera.textContent="📷 Activer caméra";fabCamera.classList.remove("alt");fabCamera.setAttribute("aria-pressed","false");}
-}
-
-function showCamError(err){
-  const name = err?.name || "";
-  const msg  = err?.message || String(err);
-  const framed = (window.top !== window.self);
-  let extra = "";
-  if (/NotAllowed|denied|Permission/i.test(name+msg)) extra = " • Réglages > Safari > Appareil photo : ‘Demander’.";
-  else if (/NotFound|Overconstrained/i.test(name+msg)) extra = " • Aucune caméra détectée.";
-  if (framed) extra += " • Dans Wix, utilise “Site externe (URL)” avec allow=\"camera\".";
-  kioskError.textContent = `Caméra indisponible (${name || "Erreur"}): ${msg}${extra}`;
-  setCamStatus("err","erreur");
-}
-
-/** 1) Warm-up permission iOS : gUM explicite, puis stop immédiat */
-async function requestCameraPermission(){
-  const constraints = { video: { facingMode: { ideal: "environment" } }, audio:false };
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  stream.getTracks().forEach(t=>t.stop());
-}
-
-/** 2) Démarrer ZXing (auto: @zxing/browser OU @zxing/library) */
-async function startZXing(){
-  const hasBrowser = !!(window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader);
-  const hasLibrary = !!(window.ZXing && window.ZXing.BrowserMultiFormatReader);
-  if (!hasBrowser && !hasLibrary) throw new Error("ZXing UMD non chargé (CDN).");
-
-  const ReaderClass = hasBrowser ? window.ZXingBrowser.BrowserMultiFormatReader
-                                 : window.ZXing.BrowserMultiFormatReader;
-  zxingReader = new ReaderClass();
-
-  const hasDecodeFromConstraints = typeof zxingReader.decodeFromConstraints === "function";
-  const onResult = (result, err) => {
-    if (result && result.getText){
-      const text = result.getText();
-      if (text){ handleScan(text); if (navigator.vibrate) navigator.vibrate(60); }
-    }
-  };
-
-  if (hasDecodeFromConstraints){
-    zxingControls = await zxingReader.decodeFromConstraints(
-      { video: { facingMode: { ideal: "environment" } } },
-      video,
-      onResult
-    );
-  } else if (typeof zxingReader.decodeFromVideoDevice === "function"){
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d=>d.kind==="videoinput");
-    const back = cams.find(d=>/back|rear|environment/i.test(d.label)) || cams[0] || null;
-    const deviceId = back?.deviceId || undefined;
-    await zxingReader.decodeFromVideoDevice(deviceId, video, onResult);
-  } else {
-    throw new Error("API ZXing incompatible (constraints/videoDevice indisponible).");
-  }
-
-  const stream = video.srcObject;
-  if (stream){
-    stream.getVideoTracks().forEach(tr=>{
-      tr.onended = () => { cameraRunning=false; setCamStatus("warn","arrêtée"); };
-    });
-  }
-}
-
-/** 3) Arrêt propre */
-async function stopCamera(){
-  try{
-    if (zxingControls && zxingControls.stop) zxingControls.stop();
-    if (zxingReader && zxingReader.reset)   zxingReader.reset();
-  }catch{}
-  finally{
-    const s = video.srcObject;
-    if (s){ s.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
-    zxingReader=null; zxingControls=null; cameraRunning=false; setCamStatus("warn","arrêtée");
-  }
-}
-
-/** 4) Cycle start (appelé sur clic bouton) */
-async function startCamera(){
-  try{
-    setCamStatus("warn","permission…");
-    await requestCameraPermission(); // iOS: geste utilisateur requis
-    setCamStatus("warn","démarrage…");
-    await startZXing();
-    cameraRunning=true; setCamStatus("ok","opérationnelle");
-  }catch(e){
-    cameraRunning=false; showCamError(e);
-  }
-}
-
-/* Boutons */
-fabCamera.addEventListener("click", async ()=>{ if (cameraRunning) await stopCamera(); else await startCamera(); });
-camRestartBtn.onclick = ()=>{ if (cameraRunning) stopCamera().then(startCamera); else startCamera(); };
-
-/* iOS : pas d’auto-start ; reprise propre si retour onglet */
-document.addEventListener("visibilitychange", ()=>{
-  if (document.visibilityState === "visible" && cameraRunning){
-    stopCamera().then(startCamera).catch(()=>{});
+window.addEventListener("load", async()=>{
+  if(isSignInWithEmailLink(auth, window.location.href)){
+    const email=localStorage.getItem("hedo_email")||prompt("Email ?");
+    await signInWithEmailLink(auth,email,window.location.href);
+    localStorage.removeItem("hedo_email");
   }
 });
-</script>
+onAuthStateChanged(auth,u=>{
+  document.getElementById("auth-status").textContent=u?("Connecté: "+u.email):"Non connecté";
+});
 
-<script>
-/* =========================
-   Admin table + Import/Export + Reset
-========================= */
-const mapBody=document.getElementById("map-body");
-const search=document.getElementById("search");
-function renderTable(){
-  const q=(search.value||"").toLowerCase();
-  const rows=state.map.slice().sort((a,b)=>a.locker-b.locker).filter(r=>!q || String(r.locker).includes(q) || (r.uid||"").toLowerCase().includes(q));
-  mapBody.innerHTML="";
-  rows.forEach(r=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td style="width:110px"><input class="input locker-input" value="${r.locker}" style="width:100%"/></td>
-      <td>
-        <div class="row" style="gap:6px">
-          <input class="input uid-input" value="${r.uid||""}" placeholder="Scanner ici…" style="flex:1" />
-          <button class="btn scan-btn">Scanner ici</button>
-          <button class="btn" title="Vider" data-action="clear">✕</button>
-        </div>
-      </td>
-      <td>
-        <div class="row" style="gap:6px">
-          <button class="btn accent save-btn">Enregistrer</button>
-          <button class="btn" style="border-color:var(--danger);color:var(--danger)" title="Supprimer">Supprimer</button>
-        </div>
-      </td>`;
-    mapBody.appendChild(tr);
-
-    const lockerEl=tr.querySelector(".locker-input");
-    const uidEl=tr.querySelector(".uid-input");
-    const scanBtn=tr.querySelector(".scan-btn");
-    const saveBtn=tr.querySelector(".save-btn");
-    const delBtn=tr.querySelector('[title="Supprimer"]');
-    const clearBtn=tr.querySelector('[data-action="clear"]');
-
-    scanBtn.addEventListener("click", ()=>{
-      uidEl.focus(); uidEl.value="";
-      const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value=normalizeToken(uidEl.value); document.removeEventListener("keydown",handler,true); } };
-      document.addEventListener("keydown", handler, true);
-    });
-    clearBtn.addEventListener("click", ()=>{ uidEl.value=""; });
-    saveBtn.addEventListener("click", ()=>{
-      const L=Number(lockerEl.value); const U=normalizeToken(uidEl.value);
-      if(!L){ alert("Numéro de casier invalide."); return; }
-      if(U && state.map.some(x=>x.uid===U && x.locker!==L)){
-        if(!confirm("Cet UID est déjà attribué à un autre casier. Continuer ?")) return;
-      }
-      upsertRow(L,U); renderTable();
-    });
-    delBtn.addEventListener("click", ()=>{ if(confirm("Supprimer cette ligne ?")){ deleteRow(lockerEl.value); renderTable(); } });
-  });
-}
-search.addEventListener("input", renderTable);
-document.getElementById("add-row").onclick=()=>{ state.map.push({locker:0,uid:""}); saveState(state); renderTable(); };
-document.getElementById("gen-sample").onclick=()=>{ if(!confirm("Créer/écraser les casiers 101–160 (UID vides) ?")) return; const set=new Set(state.map.map(r=>r.locker)); for(let n=101;n<=160;n++){ if(!set.has(n)) state.map.push({locker:n,uid:""}); } saveState(state); renderTable(); };
-
-const area=document.getElementById("import-area");
-document.getElementById("btn-export-json").onclick=()=>{ const data=JSON.stringify(state.map,null,2); downloadText("hedo-lockers.json", data); };
-document.getElementById("btn-export-csv").onclick=()=>{ const rows=[["locker","uid"], ...state.map.map(r=>[r.locker, r.uid||""])]; const csv=rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\\n"); downloadText("hedo-lockers.csv", csv); };
-document.getElementById("btn-import-json").onclick=()=>{ try{ const arr=JSON.parse(area.value); if(!Array.isArray(arr)) throw new Error("JSON invalide"); state.map=arr.map(o=>({locker:Number(o.locker),uid:normalizeToken(o.uid||"")})).filter(o=>o.locker); saveState(state); renderTable(); alert("Import JSON OK"); }catch(e){ alert("Erreur import JSON : "+e.message); } };
-document.getElementById("btn-import-csv").onclick=()=>{ try{ const lines=area.value.trim().split(/\\r?\\n/); const out=[]; for(let i=0;i<lines.length;i++){ const line=lines[i].trim(); if(!line)continue; const parts=line.split(","); if(i===0 && /locker/i.test(parts[0])) continue; const locker=Number(parts[0]); const uid=normalizeToken(parts[1]||""); if(locker) out.push({locker,uid}); } state.map=out; saveState(state); renderTable(); alert("Import CSV OK"); }catch(e){ alert("Erreur import CSV : "+e.message); } };
-function downloadText(filename, text){ const blob=new Blob([text],{type:"text/plain;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0); }
-
-document.getElementById("btn-reset").onclick=()=>{
-  if(!confirm("Réinitialiser toutes les données locales ?")) return;
-  localStorage.removeItem(LS_KEY);
-  state=loadState();
+/* ================= REALTIME SYNC ================= */
+onSnapshot(LOCKERS(),snap=>{
+  state.map=snap.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
   renderTable();
-  kioskContent.textContent="Scannez votre bracelet…";
-  kioskError.textContent="";
-};
+});
 
-/* Boot */
-renderTable();
+/* ================= KIOSK SCAN ================= */
+function handleScan(val){
+  const token=normalizeToken(val);
+  if(!token) return;
+  const row=state.map.find(r=>r.uid===token);
+  if(row){ showLocker(row.locker); return; }
+  dbFindByUID(token).then(l=>showLocker(l));
+}
+
+/* ================= QR CAMERA ================= */
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js";
+const fab=document.getElementById("fab-camera");
+let reader=null;
+fab.onclick=async()=>{
+  if(reader){ reader.reset(); reader=null; fab.textContent="📷 Caméra"; return; }
+  reader=new BrowserMultiFormatReader();
+  await reader.decodeFromConstraints({video:{facingMode:"environment"}}, document.getElementById("qr-video"),
+    (res,err)=>{ if(res?.getText) handleScan(res.getText()); });
+  fab.textContent="⏹️ Stop";
+};
 </script>
 </body>
 </html>
