@@ -20,12 +20,18 @@
   --bg:#0d0f13; --panel:#111526; --panel2:#161b2a; --text:#e9eef6; --muted:#9aa4b2;
   --accent:#D4AF37; --border:rgba(255,255,255,.14); --ok:#2ecc71; --warn:#f39c12; --err:#e74c3c;
 }
-*{box-sizing:border-box} html,body{height:100%}
-body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--text);
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  padding-top: env(safe-area-inset-top); padding-bottom: calc(env(safe-area-inset-bottom) + 0px);
+}
 .hidden{position:absolute;left:-9999px}
 
-/* Top bar */
-.topbar{position:sticky;top:0;z-index:50;background:rgba(15,17,25,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+/* Top bar (safe-area) */
+.topbar{position:sticky;top:0;z-index:50;background:rgba(15,17,25,.88);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border); padding-top: env(safe-area-inset-top)}
 .toprow{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
 .brand{display:flex;align-items:center;gap:10px}
 .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#000;display:grid;place-items:center;font-weight:900}
@@ -36,22 +42,25 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 .hamb{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:10px}
 
 /* Drawer (hamburger menu) */
-.drawer{position:fixed;inset:0 0 0 auto;width:86%;max-width:420px;background:rgba(12,14,20,.9);backdrop-filter:blur(10px);
-        transform:translateX(100%);transition:.25s;z-index:60;border-left:1px solid var(--border)}
+.drawer{position:fixed;inset:0 0 0 auto;width:86%;max-width:420px;background:rgba(12,14,20,.94);backdrop-filter:blur(10px);
+        transform:translateX(100%);transition:.25s;z-index:60;border-left:1px solid var(--border);
+        padding-bottom: calc(env(safe-area-inset-bottom) + 12px)}
 .drawer.open{transform:translateX(0)}
 .drawer .panel{padding:14px}
 .section-title{font-size:12px;color:var(--muted);margin:8px 0}
 
 /* Content */
-.container{padding:14px 14px 80px}
+.container{padding:14px 14px calc(80px + env(safe-area-inset-bottom))}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
 .card h3{margin:0 0 8px 0}
 .note{font-size:12px;color:var(--muted)}
 .input,textarea{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:12px}
-.btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;width:100%}
+.btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer}
+.btn.block{width:100%}
 .btn.inline{width:auto}
 .btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .btn.danger{border-color:var(--err);color:var(--err)}
+.btn[disabled]{opacity:.6;cursor:not-allowed}
 
 /* Kiosk box */
 .kioskbox{display:flex;align-items:center;justify-content:center;min-height:230px;border:2px dashed var(--border);border-radius:14px}
@@ -63,7 +72,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 @media(min-width:520px){ .cards{ grid-template-columns:1fr 1fr } }
 @media(min-width:900px){ .cards{ grid-template-columns:1fr 1fr 1fr } }
 .acard{background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
-.row{display:flex;gap:8px;align-items:center}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .stack{display:flex;flex-direction:column;gap:8px}
 .lbl{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
@@ -71,20 +80,21 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 /* Camera (iOS needs a real video element present) */
 #qr-video{width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0;pointer-events:none}
 
-/* Bottom nav */
-.bnav{position:fixed;left:0;right:0;bottom:0;z-index:55;background:rgba(15,17,25,.9);backdrop-filter:blur(10px);border-top:1px solid var(--border)}
+/* Bottom nav (safe-area) */
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:55;background:rgba(15,17,25,.92);backdrop-filter:blur(10px);border-top:1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom)}
 .bwrap{display:flex}
 .bbtn{flex:1;padding:10px 8px;text-align:center;color:var(--muted);border:none;background:transparent;font-weight:600}
 .bbtn.active{color:var(--text);border-top:2px solid var(--accent)}
 .bbtn span{display:block;font-size:12px}
 
 /* Floating camera */
-.fab{position:fixed;right:16px;bottom:74px;background:var(--accent);color:#000;border:none;border-radius:999px;padding:12px 14px;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:56}
+.fab{position:fixed;right:16px;bottom:calc(74px + env(safe-area-inset-bottom));background:var(--accent);color:#000;border:none;border-radius:999px;padding:12px 14px;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:56}
 .fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
 @media(min-width:900px){.fab{bottom:20px}}
 
-/* Hide helpers */
-[data-adminonly]{display:none} /* caché par défaut si pas admin */
+/* Visibility helpers */
+[data-authonly]{display:none}
 </style>
 </head>
 <body>
@@ -104,22 +114,22 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 <!-- Drawer (hamburger menu) -->
 <aside id="drawer" class="drawer" aria-hidden="true">
   <div class="panel">
-    <h3>Actions rapides</h3>
+    <h3>Actions & Compte</h3>
 
-    <div class="section-title">Compte</div>
+    <div class="section-title">Connexion</div>
     <div class="stack">
-      <input class="input" id="admin-email" placeholder="email admin" />
-      <input class="input" id="admin-pass" type="password" placeholder="mot de passe" />
-      <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input class="input" id="admin-email" placeholder="email" autocomplete="username" />
+      <input class="input" id="admin-pass" type="password" placeholder="mot de passe" autocomplete="current-password" />
+      <div class="row" style="gap:8px">
         <button class="btn inline" id="btn-login">Connexion</button>
         <button class="btn inline" id="btn-logout">Déconnexion</button>
       </div>
       <div class="small"><span id="auth-status">Non connecté</span> <span id="role-status"></span></div>
     </div>
 
-    <div class="section-title">Admin</div>
-    <div class="stack" data-adminonly>
-      <button class="btn" id="drawer-create-001-130">Créer casiers 001 → 130</button>
+    <div class="section-title">Outils (affichés après connexion)</div>
+    <div class="stack" data-authonly>
+      <button class="btn" id="drawer-create-001-130" title="Nécessite droits admin pour écrire">Créer casiers 001 → 130</button>
       <button class="btn" id="drawer-export-json">Exporter JSON</button>
       <button class="btn" id="drawer-export-csv">Exporter CSV</button>
       <button class="btn" id="drawer-import-json">Importer JSON (local)</button>
@@ -133,7 +143,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
     </div>
 
     <div style="height:12px"></div>
-    <button class="btn" id="drawer-close">Fermer</button>
+    <button class="btn block" id="drawer-close">Fermer</button>
   </div>
 </aside>
 
@@ -157,19 +167,19 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
   <section id="view-admin" style="display:none">
     <div class="card">
       <h3>Administration</h3>
-      <p class="note">Modifier le mapping <b>UID ↔ Casier</b>. Les outils (création 001→130, import/export, ajout) sont <b>réservés aux admins</b>.</p>
+      <p class="note">Les outils s’affichent après connexion. Les écritures en base restent réservées aux <b>admins</b>.</p>
 
       <div class="searchbar">
         <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
-        <button class="btn inline" id="btn-add-card" data-adminonly>Ajouter une ligne</button>
-        <button class="btn inline accent" id="btn-create-001-130" data-adminonly>Créer 001 → 130</button>
+        <button class="btn inline" id="btn-add-card" data-authonly>Ajouter une ligne</button>
+        <button class="btn inline accent" id="btn-create-001-130" data-authonly title="Nécessite droits admin pour écrire">Créer 001 → 130</button>
       </div>
 
       <div id="cards" class="cards"></div>
 
-      <div class="card" style="margin-top:12px" data-adminonly>
+      <div class="card" style="margin-top:12px" data-authonly>
         <h3>Import / Export (cache local)</h3>
-        <div class="row" style="gap:8px;flex-wrap:wrap">
+        <div class="row" style="gap:8px">
           <button class="btn inline accent" id="btn-export-json">Exporter JSON</button>
           <button class="btn inline" id="btn-export-csv">Exporter CSV</button>
           <button class="btn inline" id="btn-import-json">Importer JSON</button>
@@ -177,7 +187,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
         </div>
         <div style="height:8px"></div>
         <textarea id="import-area" class="input" placeholder='Colle JSON [{"locker":101,"uid":"ABC123"}] ou CSV locker,uid'></textarea>
-        <p class="note">Les imports écrivent dans le <b>cache local</b>. Utilise 💾 sur chaque ligne pour pousser vers Firestore.</p>
+        <p class="note">Les imports modifient le <b>cache local</b>. Utilise 💾 pour pousser vers Firestore (admin requis).</p>
       </div>
     </div>
   </section>
@@ -237,19 +247,17 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v4";
-let state = { map: [], isAdmin:false, uid:null };
+const LS_KEY="hedo_lockers_cache_v5";
+let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
 const normalize = (s)=> (s||"").trim();
 const showLocker = (locker)=> document.getElementById("kiosk-content").innerHTML =
   locker ? `<div class="note">Votre casier est le</div><div class="big">#${String(locker).padStart(3,"0")}</div>` : `<span class="note">Aucun casier trouvé.</span>`;
 
-/* Toggle UI for admins */
-function setAdminUI(isAdmin){
-  document.querySelectorAll("[data-adminonly]").forEach(el=>{
-    el.style.display = isAdmin ? "" : "none";
-  });
+/* Toggle UI helpers */
+function setAuthUI(isAuthed){
+  document.querySelectorAll("[data-authonly]").forEach(el=>{ el.style.display = isAuthed ? "" : "none"; });
 }
 
 /* ===== Firestore DAO ===== */
@@ -261,9 +269,7 @@ async function dbFetchAll(){
   const qs = await getDocs(query(LOCKERS(), orderBy("locker")));
   return qs.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
 }
-async function dbUpsert(locker, uid){
-  await setDoc(LOCKER(locker), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true });
-}
+async function dbUpsert(locker, uid){ await setDoc(LOCKER(locker), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true }); }
 async function dbDelete(locker){ await deleteDoc(LOCKER(locker)); }
 async function dbFindByUID(uid){
   const qs = await getDocs(query(LOCKERS(), where("uid","==",uid)));
@@ -311,13 +317,14 @@ btnLogout.onclick = ()=> signOut(auth);
 onAuthStateChanged(auth, async (user)=>{
   authStatus.textContent = user ? `Connecté: ${user.email}` : "Non connecté";
   state.uid = user ? user.uid : null;
+  state.isAuthed = !!user;
   state.isAdmin = false;
   if (user){
     const d = await getDoc(ADMINS(user.uid));
     state.isAdmin = d.exists();
   }
   roleStatus.textContent = state.isAdmin ? "• Admin" : "";
-  setAdminUI(state.isAdmin);
+  setAuthUI(state.isAuthed);
   renderCards();
 });
 
@@ -335,17 +342,17 @@ function renderCards(){
     card.className = "acard";
     card.innerHTML = `
       <div class="row" style="justify-content:space-between;gap:12px">
-        <div style="flex:0 0 120px"><div class="lbl">Casier</div><input class="input locker" value="${String(r.locker).padStart(3,'0')}" /></div>
-        <div style="flex:1"><div class="lbl">UID</div><input class="input uid" value="${r.uid||""}" placeholder="Scanner…" /></div>
+        <div style="flex:0 0 120px"><div class="lbl">Casier</div><input class="input locker" value="${String(r.locker).padStart(3,'0')}" ${state.isAuthed?"":"disabled"} /></div>
+        <div style="flex:1"><div class="lbl">UID</div><input class="input uid" value="${r.uid||""}" placeholder="${state.isAuthed?'Scanner…':'Connecte-toi pour éditer'}" ${state.isAuthed?"":"disabled"} /></div>
       </div>
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:6px">
-          <button class="btn inline" data-act="scan" ${state.isAdmin?"":"disabled"}>Scanner ici</button>
-          <button class="btn inline danger" data-act="clear" ${state.isAdmin?"":"disabled"}>Vider</button>
+          <button class="btn inline" data-act="scan" ${state.isAuthed?"":"disabled"}>Scanner ici</button>
+          <button class="btn inline danger" data-act="clear" ${state.isAuthed?"":"disabled"}>Vider</button>
         </div>
         <div class="row" style="gap:6px">
-          <button class="btn inline accent" data-act="save" ${state.isAdmin?"":"disabled"}>💾 Enregistrer</button>
-          <button class="btn inline danger" data-act="del" ${state.isAdmin?"":"disabled"}>🗑️ Supprimer</button>
+          <button class="btn inline accent" data-act="save" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Action en base réservée aux admins'}">💾 Enregistrer</button>
+          <button class="btn inline danger" data-act="del" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Action en base réservée aux admins'}">🗑️ Supprimer</button>
         </div>
       </div>`;
     cards.appendChild(card);
@@ -354,22 +361,24 @@ function renderCards(){
     const uidEl = card.querySelector(".uid");
 
     card.querySelector('[data-act="scan"]').onclick = ()=>{
-      if(!state.isAdmin) return;
+      if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
       uidEl.focus(); uidEl.value="";
       const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value = normalize(uidEl.value); document.removeEventListener("keydown",handler,true);} };
       document.addEventListener("keydown", handler, true);
     };
-    card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAdmin) uidEl.value=""; };
+    card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAuthed) uidEl.value=""; };
 
     card.querySelector('[data-act="save"]').onclick = async ()=>{
-      if(!state.isAdmin) return alert("Réservé aux admins.");
+      if(!state.isAuthed) return alert("Connecte-toi d’abord.");
+      if(!state.isAdmin) return alert("Cette action écrit en base et est réservée aux admins.");
       const L = Number(lockerEl.value);
       const U = normalize(uidEl.value) || null;
       if(!L) return alert("Numéro de casier invalide.");
       try{ await dbUpsert(L, U); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
     card.querySelector('[data-act="del"]').onclick = async ()=>{
-      if(!state.isAdmin) return alert("Réservé aux admins.");
+      if(!state.isAuthed) return alert("Connecte-toi d’abord.");
+      if(!state.isAdmin) return alert("Suppression réservée aux admins.");
       if(!confirm("Supprimer cette ligne ?")) return;
       try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
@@ -378,38 +387,40 @@ function renderCards(){
 search?.addEventListener("input", renderCards);
 
 document.getElementById("btn-add-card").onclick = ()=>{
-  if(!state.isAdmin) return alert("Réservé aux admins.");
+  if(!state.isAuthed) return alert("Connecte-toi d’abord.");
   state.map.push({ locker:0, uid:"" }); renderCards();
 };
 document.getElementById("btn-create-001-130").onclick = async ()=>{
-  if(!state.isAdmin) return alert("Réservé aux admins.");
+  if(!state.isAuthed) return alert("Connecte-toi d’abord.");
+  if(!state.isAdmin) return alert("Création en base réservée aux admins.");
   if(!confirm("Créer/mettre à jour les casiers 001 → 130 (UID vides) ?")) return;
   try{ await dbCreateRange001to130(); alert("Casiers 001→130 créés/rafraîchis."); }catch(e){ alert("Erreur: "+(e.message||e)); }
 };
 
-/* ===== Import / Export (local cache) & Drawer binds (admin only) ===== */
+/* ===== Import / Export (local cache) & Drawer binds ===== */
 const area = document.getElementById("import-area");
 function downloadText(filename, text){
   const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
   document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0);
 }
-function exportJSON(){ if(!state.isAdmin) return alert("Admins seulement."); downloadText("hedo-lockers.json", JSON.stringify(state.map,null,2)); }
+function mustAuth(){ if(!state.isAuthed){ alert("Connecte-toi d’abord."); return true; } return false; }
+function exportJSON(){ if(mustAuth()) return; downloadText("hedo-lockers.json", JSON.stringify(state.map,null,2)); }
 function exportCSV(){
-  if(!state.isAdmin) return alert("Admins seulement.");
+  if(mustAuth()) return;
   const rows=[["locker","uid"],...state.map.map(r=>[r.locker,r.uid||""])];
   const csv=rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\n");
   downloadText("hedo-lockers.csv", csv);
 }
 function importJSON(){
-  if(!state.isAdmin) return alert("Admins seulement.");
+  if(mustAuth()) return;
   try{ const arr=JSON.parse(area.value); if(!Array.isArray(arr)) throw new Error("JSON invalide");
     state.map=arr.map(o=>({locker:Number(o.locker),uid:normalize(o.uid||"")})).filter(o=>o.locker);
     saveLocal(); renderCards(); alert("Import local OK");
   }catch(e){ alert("Erreur: "+e.message); }
 }
 function importCSV(){
-  if(!state.isAdmin) return alert("Admins seulement.");
+  if(mustAuth()) return;
   try{ const lines=area.value.trim().split(/\r?\n/); const out=[];
     for(let i=0;i<lines.length;i++){ const line=lines[i].trim(); if(!line)continue;
       const parts=line.split(","); if(i===0 && /locker/i.test(parts[0])) continue;
@@ -428,8 +439,9 @@ document.getElementById("drawer-export-csv").onclick = exportCSV;
 document.getElementById("drawer-import-json").onclick = importJSON;
 document.getElementById("drawer-import-csv").onclick = importCSV;
 document.getElementById("drawer-create-001-130").onclick = async ()=>{
-  if(!state.isAdmin) return alert("Réservé aux admins.");
-  if(!confirm("Créer/mettre à jour les casiers 001 → 130 ?")) return;
+  if(!state.isAuthed) return alert("Connecte-toi d’abord.");
+  if(!state.isAdmin) return alert("Action réservée aux admins.");
+  if(!confirm("Créer/mettre à jour 001 → 130 ?")) return;
   try{ await dbCreateRange001to130(); alert("OK"); }catch(e){ alert("Erreur: "+(e.message||e)); }
 };
 
@@ -454,7 +466,7 @@ async function onScan(raw){
   try{ const locker = await dbFindByUID(token); showLocker(locker); }catch{ showLocker(null); }
 }
 
-/* ===== Caméra iOS18 — warm-up + ZXing ===== */
+/* ===== Caméra iOS/Android (PWA A2HS) — warm-up + ZXing + standalone tweaks ===== */
 const video = document.getElementById("qr-video");
 const camDot = document.getElementById("cam-dot");
 const camLabel = document.getElementById("cam-label");
@@ -462,6 +474,7 @@ const fabCamera = document.getElementById("fab-camera");
 const camRestartBtn = document.getElementById("cam-restart");
 
 let cameraRunning=false, zxingReader=null, zxingControls=null;
+
 function setCamStatus(kind,msg){
   camDot.className="dot "+(kind||"warn"); camLabel.textContent="Caméra : "+(msg||"");
   if (cameraRunning){ fabCamera.textContent="⏹️ Arrêter caméra"; fabCamera.classList.add("alt"); fabCamera.setAttribute("aria-pressed","true"); }
@@ -469,12 +482,13 @@ function setCamStatus(kind,msg){
 }
 function showCamError(e){
   const name=e?.name||"", msg=e?.message||String(e), framed=(window.top!==window.self);
-  let extra=""; if(/NotAllowed|denied|Permission/i.test(name+msg)) extra=" • Réglages > Safari > Appareil photo : ‘Demander’.";
-  if(framed) extra+=" • Si intégré dans Wix, utiliser “Site externe (URL)” avec allow=\"camera\".";
+  let extra=""; if(/NotAllowed|denied|Permission/i.test(name+msg)) extra=" • Réglages > Safari/Chrome → Appareil photo : ‘Autoriser / Demander’.";
+  if(framed) extra+=" • Dans Wix, intégrer en “Site externe (URL)” avec allow=\"camera\".";
   document.getElementById("kiosk-error").textContent = `Caméra indisponible (${name||"Erreur"}): ${msg}${extra}`;
   setCamStatus("err","erreur");
 }
 async function requestCameraPermission(){
+  // iOS/Android standalone: gUM doit être déclenché par un geste utilisateur
   const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false });
   s.getTracks().forEach(t=>t.stop());
 }
@@ -494,13 +508,21 @@ async function stopCamera(){
   zxingReader=null; zxingControls=null; cameraRunning=false; setCamStatus("warn","arrêtée");
 }
 async function startCamera(){
-  try{ setCamStatus("warn","permission…"); await requestCameraPermission();
-       setCamStatus("warn","démarrage…"); await startZXing();
-       cameraRunning=true; setCamStatus("ok","opérationnelle"); }
-  catch(e){ cameraRunning=false; showCamError(e); }
+  try{
+    setCamStatus("warn","permission…"); await requestCameraPermission();
+    setCamStatus("warn","démarrage…"); await startZXing();
+    cameraRunning=true; setCamStatus("ok","opérationnelle");
+  }catch(e){ cameraRunning=false; showCamError(e); }
 }
 fabCamera.onclick = async ()=>{ if(cameraRunning) await stopCamera(); else await startCamera(); };
 camRestartBtn.onclick = ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); };
+
+// Reprise propre au retour d’arrière-plan (A2HS)
+document.addEventListener("visibilitychange", ()=>{
+  if (document.visibilityState === "visible" && cameraRunning){
+    stopCamera().then(startCamera).catch(()=>{});
+  }
+});
 
 /* ===== Reset local ===== */
 document.getElementById("btn-reset").onclick = ()=>{
@@ -512,13 +534,22 @@ document.getElementById("btn-reset").onclick = ()=>{
 };
 
 /* ===== Boot ===== */
-loadLocal(); setAdminUI(false); renderCards(); startRealtime();
+loadLocal(); setAuthUI(false); renderCards(); startRealtime();
 
 /* ===== SW ===== */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
   });
+}
+
+/* ===== Standalone detection (A2HS) — petits ajustements ===== */
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
+}
+if (isStandalone()){
+  // Optionnel : petites optimisations UI en mode app
+  document.body.classList.add("standalone");
 }
 </script>
 </body>
