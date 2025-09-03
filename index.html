@@ -5,56 +5,149 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Hedo Lockers</title>
 
+<!-- PWA -->
 <meta name="theme-color" content="#0d0f13" />
+<link rel="manifest" href="manifest.webmanifest" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-<link rel="manifest" href="manifest.webmanifest" />
 
-<!-- ZXing pour lecture QR -->
+<!-- ZXing (QR) -->
 <script defer src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
 
+<!-- Styles minimalistes (sans lib) -->
 <style>
-/* (même CSS que ta version précédente, je n’ai pas modifié) */
-body{margin:0;background:#0d0f13;color:#e9eef6;font-family:system-ui,sans-serif}
-.btn{background:#141821;border:1px solid rgba(255,255,255,.12);color:#e9eef6;padding:10px 12px;border-radius:10px;cursor:pointer}
-.btn.accent{border-color:#D4AF37}
-.panel{background:#141821;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px;margin:10px}
-.kiosk{display:flex;align-items:center;justify-content:center;min-height:200px;border:2px dashed rgba(255,255,255,.12);border-radius:12px}
-.big{font-size:64px;font-weight:800;color:#D4AF37}
-.hidden{position:absolute;left:-9999px}
-.fab{position:fixed;right:16px;bottom:16px;background:#D4AF37;border:none;border-radius:999px;padding:14px 16px;z-index:100}
+:root{
+  --bg:#0d0f13; --panel:#121623; --panel2:#161b2a; --text:#e9eef6; --muted:#9aa4b2;
+  --accent:#D4AF37; --border:rgba(255,255,255,.12); --ok:#2ecc71; --warn:#f39c12; --err:#e74c3c;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}
+.container{max-width:1100px;margin:0 auto;padding:20px}
+.header{display:flex;gap:14px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .logo{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#000;display:grid;place-items:center;font-weight:900}
+.brand .title{font-weight:700;letter-spacing:.3px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;transition:.2s}
+.btn:hover{transform:translateY(-1px)}
+.btn.accent{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.btn.danger{border-color:var(--err);color:var(--err)}
+.input,textarea{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:12px}
+.grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px}
+@media(min-width:1000px){.grid{grid-template-columns:1.1fr .9fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:16px}
+.card h3{margin:0 0 8px 0}
+.note{font-size:12px;color:var(--muted)}
+.kioskbox{display:flex;align-items:center;justify-content:center;min-height:250px;border:2px dashed var(--border);border-radius:14px}
+.big{font-size:64px;font-weight:900;color:var(--accent);letter-spacing:1px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.table{width:100%;border-collapse:collapse;margin-top:8px}
+.table th,.table td{padding:10px;border-bottom:1px solid var(--border);font-size:14px}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--panel2);font-size:12px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:999px;background:var(--warn)}
+.dot.ok{background:var(--ok)} .dot.err{background:var(--err)}
+.footer{margin-top:18px;font-size:12px;color:var(--muted);text-align:center}
+
+/* Caméra: vidéo invisible mais présente (iOS) */
+#qr-video{width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0;pointer-events:none}
+
+/* FAB mobile */
+.fab{position:fixed;right:16px;bottom:16px;background:var(--accent);color:#000;border:none;border-radius:999px;padding:14px 16px;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:100}
+.fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+@media(min-width:900px){.fab{display:none}}
 </style>
 </head>
 <body>
-<div class="panel">
-  <h3>Écran client</h3>
-  <input id="hidden-capture" class="hidden" />
-  <video id="qr-video" muted playsinline style="width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0"></video>
-  <div class="kiosk"><div id="kiosk-content">Scannez votre bracelet…</div></div>
-  <div id="kiosk-error" style="color:red"></div>
-</div>
-
-<div class="panel" id="view-admin">
-  <h3>Admin</h3>
-  <div>
-    <input class="btn" id="admin-email" placeholder="email admin" />
-    <button class="btn" id="btn-login">Se connecter</button>
-    <button class="btn" id="btn-logout">Déconnexion</button>
-    <span id="auth-status"></span>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo">H</div>
+      <div class="title">Hedo Lockers</div>
+      <span class="badge"><span class="dot" id="cam-dot"></span><span id="cam-label">Caméra : arrêtée</span></span>
+    </div>
+    <div class="tabs">
+      <button class="btn accent" id="tab-kiosk">Kiosk</button>
+      <button class="btn" id="tab-admin">Admin</button>
+      <button class="btn" id="tab-tools">Import/Export</button>
+      <button class="btn" id="btn-reset" title="Effacer le cache local">Réinitialiser (local)</button>
+      <button class="btn" id="cam-restart" title="Relancer caméra">Relancer caméra</button>
+    </div>
   </div>
-  <table id="map-table" border="1" style="margin-top:10px;width:100%"><thead><tr><th>Casier</th><th>UID</th><th></th></tr></thead><tbody id="map-body"></tbody></table>
-  <button class="btn accent" id="add-row">Ajouter une ligne</button>
+
+  <div class="grid">
+    <!-- KIOSK -->
+    <section class="card" id="view-kiosk">
+      <h3>Écran client</h3>
+      <p class="note">La <b>douchette USB</b> (RFID/QR en mode clavier) est capturée en permanence. La <b>caméra</b> pour lire les QR s’active avec le bouton 📷. (Pas d’aperçu visuel.)</p>
+
+      <input id="hidden-capture" class="hidden" />
+      <video id="qr-video" muted playsinline></video>
+
+      <div class="kioskbox" id="kiosk-box"><div id="kiosk-content" class="note">Scannez votre bracelet…</div></div>
+      <div id="kiosk-error" class="note" style="color:var(--err);margin-top:8px"></div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="card" id="view-admin" style="display:none">
+      <h3>Administration</h3>
+      <p class="note">Connecte-toi pour modifier le mapping <b>UID ↔ Casier</b>. Les casiers peuvent être créés en masse (001→130).</p>
+
+      <div class="row" style="margin-bottom:8px">
+        <input class="input" id="admin-email" placeholder="email admin" />
+        <button class="btn" id="btn-login">Se connecter (lien email)</button>
+        <button class="btn" id="btn-logout">Déconnexion</button>
+        <span id="auth-status" class="note">Non connecté</span>
+        <span id="role-status" class="note"></span>
+      </div>
+
+      <div class="row" id="admin-actions" style="display:none">
+        <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
+        <button class="btn" id="add-row">Ajouter une ligne</button>
+        <button class="btn accent" id="btn-create-001-130">Créer casiers 001 → 130</button>
+      </div>
+
+      <table class="table" id="map-table">
+        <thead><tr><th># Casier</th><th>UID</th><th>Actions</th></tr></thead>
+        <tbody id="map-body"></tbody>
+      </table>
+      <div class="note" style="margin-top:6px">Astuce : “Scanner ici” capte le prochain scan clavier dans la ligne.</div>
+    </section>
+
+    <!-- TOOLS -->
+    <section class="card" id="view-tools" style="display:none">
+      <h3>Import / Export</h3>
+      <div class="row">
+        <button class="btn accent" id="btn-export-json">Exporter JSON</button>
+        <button class="btn" id="btn-export-csv">Exporter CSV</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <textarea class="input" id="import-area" style="width:100%;min-height:140px" placeholder='Colle ici un JSON [{"locker":101,"uid":"ABC123"},…] ou CSV locker,uid'></textarea>
+      </div>
+      <div class="row">
+        <button class="btn" id="btn-import-json">Importer JSON (local)</button>
+        <button class="btn" id="btn-import-csv">Importer CSV (local)</button>
+      </div>
+      <p class="note">Les imports ci-dessus n’écrivent que dans le <b>cache local</b>. Pour pousser en base, utilise l’onglet Admin (bouton 💾 sur chaque ligne).</p>
+    </section>
+  </div>
+
+  <div class="footer">Hedo — uniquement UID ↔ n° casier. Pas de données nominatives.</div>
 </div>
 
-<button id="fab-camera" class="fab">📷 Caméra</button>
+<!-- Bouton mobile (caméra) -->
+<button id="fab-camera" class="fab" aria-pressed="false">📷 Activer caméra</button>
 
+<!-- ================= SCRIPTS ================= -->
 <script type="module">
-/* ================= FIREBASE INIT ================= */
+/* Firebase v9 (modular) */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, orderBy, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, orderBy, where, onSnapshot, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+/* --- CONFIG fournie par toi --- */
 const firebaseConfig = {
   apiKey: "AIzaSyAZ7M8dUKqcUwa9rDyWEdHEwnFVPlrpCds",
   authDomain: "lockers-26331.firebaseapp.com",
@@ -63,101 +156,338 @@ const firebaseConfig = {
   messagingSenderId: "601816918378",
   appId: "1:601816918378:web:b6045b10b60e7957c19d13"
 };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-/* ================= GLOBAL STATE ================= */
-let state = { map: [] };
-const kioskContent = document.getElementById("kiosk-content");
-function normalizeToken(s){ return (s||"").trim(); }
-function showLocker(locker){ kioskContent.innerHTML = locker ? `<div>Votre casier</div><div class="big">#${locker}</div>` : "<span>Aucun casier trouvé</span>"; }
+/* ========= UI NAV ========= */
+const viewKiosk = document.getElementById("view-kiosk");
+const viewAdmin = document.getElementById("view-admin");
+const viewTools = document.getElementById("view-tools");
+const tabKiosk = document.getElementById("tab-kiosk");
+const tabAdmin = document.getElementById("tab-admin");
+const tabTools = document.getElementById("tab-tools");
+function setTab(name){
+  viewKiosk.style.display = name==="kiosk" ? "block" : "none";
+  viewAdmin.style.display  = name==="admin" ? "block" : "none";
+  viewTools.style.display  = name==="tools" ? "block" : "none";
+  tabKiosk.classList.toggle("accent", name==="kiosk");
+  tabAdmin.classList.toggle("accent", name==="admin");
+  tabTools.classList.toggle("accent", name==="tools");
+}
+tabKiosk.onclick = ()=>setTab("kiosk");
+tabAdmin.onclick = ()=>setTab("admin");
+tabTools.onclick = ()=>setTab("tools");
+setTab("kiosk");
 
-/* ================= FIRESTORE DAO ================= */
-const LOCKERS = () => collection(db,"lockers");
-const LOCKER_DOC = (id)=> doc(db,"lockers",String(id));
+/* ========= STATE & HELPERS ========= */
+const LS_KEY="hedo_lockers_cache_v1";
+let state = { map: [], isAdmin:false, uid:null };
+function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify({map:state.map})); }
+function loadLocal(){ try{ const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map; }catch{} }
+function normalize(s){ return (s||"").trim(); }
+function showLocker(locker){ const el=document.getElementById("kiosk-content"); el.innerHTML = locker ? `<div class="note">Votre casier est le</div><div class="big">#${String(locker).padStart(3,"0")}</div>` : `<span class="note">Aucun casier trouvé.</span>`; }
+
+/* ========= FIRESTORE DAO ========= */
+const LOCKERS = () => collection(db, "lockers");
+const LOCKER  = (id) => doc(db, "lockers", String(id));
+const ADMINS  = (uid) => doc(db, "admins", String(uid)); // doc presence = admin
 
 async function dbFetchAll(){
   const qs = await getDocs(query(LOCKERS(), orderBy("locker")));
   return qs.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
 }
 async function dbUpsert(locker, uid){
-  await setDoc(LOCKER_DOC(locker), { locker:Number(locker), uid:uid||null, updatedAt:serverTimestamp() }, { merge:true });
+  await setDoc(LOCKER(locker), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true });
 }
-async function dbDelete(locker){ await deleteDoc(LOCKER_DOC(locker)); }
+async function dbDelete(locker){
+  await deleteDoc(LOCKER(locker));
+}
 async function dbFindByUID(uid){
   const qs = await getDocs(query(LOCKERS(), where("uid","==",uid)));
-  if(qs.empty) return null;
-  return qs.docs[0].data().locker;
+  if (qs.empty) return null;
+  const first = qs.docs[0];
+  return first.data().locker ?? Number(first.id);
+}
+async function dbCreateRange001to130(){
+  const batch = writeBatch(db);
+  for (let n=1; n<=130; n++){
+    const id = String(n).padStart(3,"0");
+    batch.set(LOCKER(id), { locker:Number(id), uid:null, updatedAt: serverTimestamp() }, { merge:true });
+  }
+  await batch.commit();
 }
 
-/* ================= ADMIN UI ================= */
-const mapBody = document.getElementById("map-body");
-function renderTable(){
-  mapBody.innerHTML="";
-  state.map.forEach(r=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td><input value="${r.locker||""}" class="locker"/></td>
-      <td><input value="${r.uid||""}" class="uid"/></td>
-      <td><button class="save">💾</button><button class="del">🗑️</button></td>`;
-    mapBody.appendChild(tr);
-    tr.querySelector(".save").onclick=async()=>{
-      await dbUpsert(tr.querySelector(".locker").value, tr.querySelector(".uid").value);
-    };
-    tr.querySelector(".del").onclick=async()=>{
-      await dbDelete(tr.querySelector(".locker").value);
-    };
+/* ========= REALTIME ========= */
+function startRealtime(){
+  // lockers
+  onSnapshot(LOCKERS(), snap=>{
+    state.map = snap.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
+    saveLocal(); renderTable();
   });
 }
-document.getElementById("add-row").onclick=()=>{ state.map.push({locker:0,uid:""}); renderTable(); };
 
-/* ================= FIREBASE AUTH ================= */
-const emailInput=document.getElementById("admin-email");
-document.getElementById("btn-login").onclick=async()=>{
-  const email=emailInput.value;
-  await sendSignInLinkToEmail(auth,email,{url:window.location.href,handleCodeInApp:true});
-  localStorage.setItem("hedo_email",email);
-  alert("Lien envoyé à "+email);
+/* ========= AUTH ========= */
+const emailInput = document.getElementById("admin-email");
+const btnLogin = document.getElementById("btn-login");
+const btnLogout = document.getElementById("btn-logout");
+const authStatus = document.getElementById("auth-status");
+const roleStatus = document.getElementById("role-status");
+const adminActions = document.getElementById("admin-actions");
+
+btnLogin.onclick = async ()=>{
+  const email = normalize(emailInput.value);
+  if(!email) return alert("Entre un email.");
+  await sendSignInLinkToEmail(auth, email, { url: window.location.href, handleCodeInApp: true });
+  localStorage.setItem("hedo_email", email);
+  alert("Lien de connexion envoyé à " + email);
 };
-document.getElementById("btn-logout").onclick=()=>signOut(auth);
+btnLogout.onclick = ()=>signOut(auth);
 
-window.addEventListener("load", async()=>{
-  if(isSignInWithEmailLink(auth, window.location.href)){
-    const email=localStorage.getItem("hedo_email")||prompt("Email ?");
-    await signInWithEmailLink(auth,email,window.location.href);
+window.addEventListener("load", async ()=>{
+  if (isSignInWithEmailLink(auth, window.location.href)) {
+    const saved = localStorage.getItem("hedo_email") || prompt("Email ?");
+    await signInWithEmailLink(auth, saved, window.location.href);
     localStorage.removeItem("hedo_email");
   }
 });
-onAuthStateChanged(auth,u=>{
-  document.getElementById("auth-status").textContent=u?("Connecté: "+u.email):"Non connecté";
-});
 
-/* ================= REALTIME SYNC ================= */
-onSnapshot(LOCKERS(),snap=>{
-  state.map=snap.docs.map(d=>({ locker:Number(d.id), ...(d.data()||{}) }));
+onAuthStateChanged(auth, async (user)=>{
+  authStatus.textContent = user ? `Connecté: ${user.email}` : "Non connecté";
+  state.uid = user ? user.uid : null;
+  state.isAdmin = false;
+  if (user){
+    // Vérifie le rôle admin via un doc Firestore: admins/{uid}
+    const d = await getDoc(ADMINS(user.uid));
+    state.isAdmin = d.exists();
+  }
+  roleStatus.textContent = state.isAdmin ? "• Rôle: admin" : "";
+  adminActions.style.display = state.isAdmin ? "flex" : "none";
   renderTable();
 });
 
-/* ================= KIOSK SCAN ================= */
-function handleScan(val){
-  const token=normalizeToken(val);
-  if(!token) return;
-  const row=state.map.find(r=>r.uid===token);
-  if(row){ showLocker(row.locker); return; }
-  dbFindByUID(token).then(l=>showLocker(l));
+/* ========= ADMIN TABLE ========= */
+const mapBody = document.getElementById("map-body");
+const search = document.getElementById("search");
+function renderTable(){
+  const q = (search?.value||"").toLowerCase();
+  const rows = state.map
+    .slice()
+    .sort((a,b)=>a.locker-b.locker)
+    .filter(r => !q || String(r.locker).includes(q) || (r.uid||"").toLowerCase().includes(q));
+
+  mapBody.innerHTML = "";
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="width:130px">
+        <input class="input locker" value="${String(r.locker).padStart(3,'0')}" style="width:100%"/>
+      </td>
+      <td>
+        <div class="row">
+          <input class="input uid" value="${r.uid||""}" placeholder="Scanner ici…" style="flex:1"/>
+          <button class="btn scan">Scanner ici</button>
+          <button class="btn danger clear" title="Vider">✕</button>
+        </div>
+      </td>
+      <td style="width:180px">
+        <div class="row">
+          <button class="btn accent save" ${state.isAdmin?"":"disabled"}>💾 Enregistrer</button>
+          <button class="btn danger del" ${state.isAdmin?"":"disabled"}>🗑️ Supprimer</button>
+        </div>
+      </td>`;
+    mapBody.appendChild(tr);
+
+    const lockerEl = tr.querySelector(".locker");
+    const uidEl = tr.querySelector(".uid");
+    tr.querySelector(".scan").onclick = ()=>{
+      uidEl.focus(); uidEl.value="";
+      const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value = normalize(uidEl.value); document.removeEventListener("keydown",handler,true);} };
+      document.addEventListener("keydown", handler, true);
+    };
+    tr.querySelector(".clear").onclick = ()=>{ uidEl.value=""; };
+    tr.querySelector(".save").onclick = async ()=>{
+      if(!state.isAdmin) return alert("Réservé aux admins.");
+      const L = Number(lockerEl.value);
+      const U = normalize(uidEl.value) || null;
+      if(!L) return alert("Numéro de casier invalide.");
+      try{ await dbUpsert(L,U); }catch(e){ alert("Erreur: "+(e.message||e)); }
+    };
+    tr.querySelector(".del").onclick = async ()=>{
+      if(!state.isAdmin) return alert("Réservé aux admins.");
+      if(!confirm("Supprimer cette ligne ?")) return;
+      try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Erreur: "+(e.message||e)); }
+    };
+  });
+}
+search?.addEventListener("input", renderTable);
+document.getElementById("add-row").onclick = ()=>{
+  state.map.push({ locker:0, uid:"" });
+  renderTable();
+};
+document.getElementById("btn-create-001-130").onclick = async ()=>{
+  if(!state.isAdmin) return alert("Réservé aux admins.");
+  if(!confirm("Créer/mettre à jour les casiers 001 → 130 (UID vides) ?")) return;
+  try{
+    await dbCreateRange001to130();
+    alert("Casiers 001→130 créés/rafraîchis.");
+  }catch(e){
+    alert("Erreur création: "+(e.message||e));
+  }
+};
+
+/* ========= IMPORT/EXPORT (cache local) ========= */
+const area = document.getElementById("import-area");
+document.getElementById("btn-export-json").onclick = ()=>{
+  const data = JSON.stringify(state.map, null, 2);
+  downloadText("hedo-lockers.json", data);
+};
+document.getElementById("btn-export-csv").onclick = ()=>{
+  const rows = [["locker","uid"], ...state.map.map(r=>[r.locker, r.uid||""])];
+  const csv = rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\n");
+  downloadText("hedo-lockers.csv", csv);
+};
+document.getElementById("btn-import-json").onclick = ()=>{
+  try{
+    const arr = JSON.parse(area.value);
+    if(!Array.isArray(arr)) throw new Error("JSON invalide");
+    state.map = arr.map(o=>({ locker:Number(o.locker), uid:normalize(o.uid||"") })).filter(o=>o.locker);
+    saveLocal(); renderTable(); alert("Import local OK");
+  }catch(e){ alert("Erreur: "+e.message); }
+};
+document.getElementById("btn-import-csv").onclick = ()=>{
+  try{
+    const lines = area.value.trim().split(/\r?\n/); const out=[];
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i].trim(); if(!line) continue;
+      const parts=line.split(",");
+      if(i===0 && /locker/i.test(parts[0])) continue;
+      const locker=Number(parts[0]); const uid=normalize(parts[1]||"");
+      if(locker) out.push({locker,uid});
+    }
+    state.map=out; saveLocal(); renderTable(); alert("Import local OK");
+  }catch(e){ alert("Erreur: "+e.message); }
+};
+function downloadText(filename, text){
+  const blob = new Blob([text],{type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
 }
 
-/* ================= QR CAMERA ================= */
-import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js";
-const fab=document.getElementById("fab-camera");
-let reader=null;
-fab.onclick=async()=>{
-  if(reader){ reader.reset(); reader=null; fab.textContent="📷 Caméra"; return; }
-  reader=new BrowserMultiFormatReader();
-  await reader.decodeFromConstraints({video:{facingMode:"environment"}}, document.getElementById("qr-video"),
-    (res,err)=>{ if(res?.getText) handleScan(res.getText()); });
-  fab.textContent="⏹️ Stop";
+/* ========= KIOSK – SCAN CLAVIER ========= */
+const hiddenInput = document.getElementById("hidden-capture");
+const kioskBox = document.getElementById("kiosk-box");
+let buffer="";
+function focusCapture(){ hiddenInput.focus(); }
+hiddenInput.addEventListener("keydown",(e)=>{
+  if(e.key==="Enter"){ const data=buffer; buffer=""; onScan(data); }
+  else if(e.key.length===1){ buffer+=e.key; }
+  else if(e.key==="Backspace"){ buffer=buffer.slice(0,-1); }
+});
+kioskBox.addEventListener("click", focusCapture);
+document.addEventListener("click",(e)=>{ if(viewKiosk.contains(e.target)) setTimeout(focusCapture,0); });
+focusCapture();
+
+/* ========= KIOSK – LOGIQUE DE LOOKUP ========= */
+async function onScan(raw){
+  const token = normalize(raw);
+  if(!token || token.length<3) return;
+
+  // 1) cache local
+  const row = state.map.find(r => (r.uid||"") === token);
+  if (row) { showLocker(row.locker); return; }
+
+  // 2) base de données (au cas où un autre poste vient de modifier)
+  try{
+    const locker = await dbFindByUID(token);
+    if (locker) showLocker(locker);
+    else showLocker(null);
+  }catch{ showLocker(null); }
+}
+
+/* ========= CAMÉRA iOS18 — warm-up + ZXing auto ========= */
+const video = document.getElementById("qr-video");
+const camDot = document.getElementById("cam-dot");
+const camLabel = document.getElementById("cam-label");
+const camRestartBtn = document.getElementById("cam-restart");
+const fabCamera = document.getElementById("fab-camera");
+
+let cameraRunning=false;
+let zxingReader=null;   // instance
+let zxingControls=null; // stop()
+
+function setCamStatus(kind,msg){
+  camDot.className = "dot " + (kind||"warn");
+  camLabel.textContent = "Caméra : " + (msg||"");
+  if (cameraRunning){ fabCamera.textContent="⏹️ Arrêter caméra"; fabCamera.classList.add("alt"); fabCamera.setAttribute("aria-pressed","true"); }
+  else { fabCamera.textContent="📷 Activer caméra"; fabCamera.classList.remove("alt"); fabCamera.setAttribute("aria-pressed","false"); }
+}
+function showCamError(e){
+  const name=e?.name||"", msg=e?.message||String(e), framed=(window.top!==window.self);
+  let extra="";
+  if(/NotAllowed|denied|Permission/i.test(name+msg)) extra=" • Réglages > Safari > Appareil photo : ‘Demander’.";
+  if(framed) extra+=" • Si intégré dans Wix, utiliser “Site externe (URL)” avec allow=\"camera\".";
+  document.getElementById("kiosk-error").textContent = `Caméra indisponible (${name||"Erreur"}): ${msg}${extra}`;
+  setCamStatus("err","erreur");
+}
+async function requestCameraPermission(){
+  const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false });
+  s.getTracks().forEach(t=>t.stop());
+}
+async function startZXing(){
+  const hasBrowser = !!(window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader);
+  if(!hasBrowser) throw new Error("ZXing non chargé.");
+  const { BrowserMultiFormatReader } = window.ZXingBrowser;
+  zxingReader = new BrowserMultiFormatReader();
+  const onResult = (result, err)=>{
+    if(result?.getText){ const text=result.getText(); if(text){ onScan(text); if(navigator.vibrate) navigator.vibrate(60); } }
+  };
+  zxingControls = await zxingReader.decodeFromConstraints({ video:{ facingMode:{ ideal:"environment" } } }, video, onResult);
+  const stream = video.srcObject;
+  if(stream){ stream.getVideoTracks().forEach(tr => tr.onended = ()=>{ cameraRunning=false; setCamStatus("warn","arrêtée"); }); }
+}
+async function stopCamera(){
+  try{ if (zxingControls?.stop) zxingControls.stop(); if (zxingReader?.reset) zxingReader.reset(); }catch{}
+  const s = video.srcObject; if(s){ s.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
+  zxingReader=null; zxingControls=null; cameraRunning=false; setCamStatus("warn","arrêtée");
+}
+async function startCamera(){
+  try{
+    setCamStatus("warn","permission…");
+    await requestCameraPermission();
+    setCamStatus("warn","démarrage…");
+    await startZXing();
+    cameraRunning=true; setCamStatus("ok","opérationnelle");
+  }catch(e){ cameraRunning=false; showCamError(e); }
+}
+fabCamera.onclick = async ()=>{ if(cameraRunning) await stopCamera(); else await startCamera(); };
+camRestartBtn.onclick = ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); };
+
+/* ========= RESET LOCAL ========= */
+document.getElementById("btn-reset").onclick = ()=>{
+  if(!confirm("Réinitialiser le cache local ?")) return;
+  localStorage.removeItem(LS_KEY);
+  state.map=[]; renderTable();
+  document.getElementById("kiosk-content").textContent="Scannez votre bracelet…";
+  document.getElementById("kiosk-error").textContent="";
 };
+
+/* ========= BOOT ========= */
+loadLocal();
+renderTable();
+startRealtime();
+</script>
+
+<!-- SW registration -->
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
