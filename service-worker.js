@@ -67,3 +67,39 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+// ...
+
+const emailInput = document.getElementById("admin-email");
+const passInput  = document.getElementById("admin-pass");
+const btnLogin   = document.getElementById("btn-login");
+const btnLogout  = document.getElementById("btn-logout");
+const authStatus = document.getElementById("auth-status");
+const roleStatus = document.getElementById("role-status");
+
+btnLogin.onclick = async ()=>{
+  try {
+    const email = emailInput.value.trim();
+    const pass  = passInput.value.trim();
+    if (!email || !pass) return alert("Email et mot de passe requis");
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    alert("Erreur connexion : " + (e.message || e));
+  }
+};
+
+btnLogout.onclick = ()=> signOut(auth);
+
+onAuthStateChanged(auth, async (user)=>{
+  authStatus.textContent = user ? `Connecté: ${user.email}` : "Non connecté";
+  state.uid = user ? user.uid : null;
+  state.isAdmin = false;
+  if (user){
+    const d = await getDoc(ADMINS(user.uid));
+    state.isAdmin = d.exists();
+  }
+  roleStatus.textContent = state.isAdmin ? "• Admin" : "";
+  renderCards?.();
+});
