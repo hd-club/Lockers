@@ -1,7 +1,7 @@
 {
   "name": "Hedo Lockers",
   "short_name": "Hedo",
-  "description": "Kiosk RFID/QR + Admin pour afficher le numéro de casier",
+  "description": "Kiosk RFID/QR + Admin (Firebase) pour afficher/éditer les numéros de casier.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
