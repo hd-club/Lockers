@@ -36,14 +36,14 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 .hamb{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:10px}
 
 /* Drawer (hamburger menu) */
-.drawer{position:fixed;inset:0 0 0 auto; width:86%; max-width:420px; background:rgba(12,14,20,.9); backdrop-filter:blur(10px);
-        transform:translateX(100%); transition:.25s; z-index:60; border-left:1px solid var(--border)}
+.drawer{position:fixed;inset:0 0 0 auto;width:86%;max-width:420px;background:rgba(12,14,20,.9);backdrop-filter:blur(10px);
+        transform:translateX(100%);transition:.25s;z-index:60;border-left:1px solid var(--border)}
 .drawer.open{transform:translateX(0)}
 .drawer .panel{padding:14px}
 .section-title{font-size:12px;color:var(--muted);margin:8px 0}
 
 /* Content */
-.container{padding:14px 14px 80px} /* bottom space for navbar */
+.container{padding:14px 14px 80px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
 .card h3{margin:0 0 8px 0}
 .note{font-size:12px;color:var(--muted)}
@@ -58,7 +58,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 .big{font-size:56px;font-weight:900;color:var(--accent);letter-spacing:1px}
 
 /* Admin list as cards */
-.searchbar{display:flex;gap:10px;align-items:center;margin:8px 0}
+.searchbar{display:flex;gap:10px;align-items:center;margin:8px 0;flex-wrap:wrap}
 .cards{display:grid;grid-template-columns:1fr;gap:10px}
 @media(min-width:520px){ .cards{ grid-template-columns:1fr 1fr } }
 @media(min-width:900px){ .cards{ grid-template-columns:1fr 1fr 1fr } }
@@ -68,7 +68,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 .lbl{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 
-/* Camera video invisible mais présente (iOS) */
+/* Camera (iOS needs a real video element present) */
 #qr-video{width:2px;height:2px;opacity:0;position:fixed;left:0;bottom:0;pointer-events:none}
 
 /* Bottom nav */
@@ -78,10 +78,13 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 .bbtn.active{color:var(--text);border-top:2px solid var(--accent)}
 .bbtn span{display:block;font-size:12px}
 
-/* Floating camera button (extra quick) */
+/* Floating camera */
 .fab{position:fixed;right:16px;bottom:74px;background:var(--accent);color:#000;border:none;border-radius:999px;padding:12px 14px;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:56}
 .fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
 @media(min-width:900px){.fab{bottom:20px}}
+
+/* Hide helpers */
+[data-adminonly]{display:none} /* caché par défaut si pas admin */
 </style>
 </head>
 <body>
@@ -94,7 +97,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
       <div class="title">Hedo Lockers</div>
       <span class="badge"><span class="dot" id="cam-dot"></span><span id="cam-label">Caméra : arrêtée</span></span>
     </div>
-    <button id="btn-hamb" class="hamb">☰</button>
+    <button id="btn-hamb" class="hamb" aria-label="Ouvrir le menu">☰</button>
   </div>
 </header>
 
@@ -102,28 +105,33 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 <aside id="drawer" class="drawer" aria-hidden="true">
   <div class="panel">
     <h3>Actions rapides</h3>
-    <div class="section-title">Admin</div>
+
+    <div class="section-title">Compte</div>
     <div class="stack">
+      <input class="input" id="admin-email" placeholder="email admin" />
+      <input class="input" id="admin-pass" type="password" placeholder="mot de passe" />
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn inline" id="btn-login">Connexion</button>
+        <button class="btn inline" id="btn-logout">Déconnexion</button>
+      </div>
+      <div class="small"><span id="auth-status">Non connecté</span> <span id="role-status"></span></div>
+    </div>
+
+    <div class="section-title">Admin</div>
+    <div class="stack" data-adminonly>
       <button class="btn" id="drawer-create-001-130">Créer casiers 001 → 130</button>
       <button class="btn" id="drawer-export-json">Exporter JSON</button>
       <button class="btn" id="drawer-export-csv">Exporter CSV</button>
       <button class="btn" id="drawer-import-json">Importer JSON (local)</button>
       <button class="btn" id="drawer-import-csv">Importer CSV (local)</button>
     </div>
+
     <div class="section-title">Caméra & cache</div>
     <div class="stack">
       <button class="btn" id="cam-restart">Relancer caméra</button>
       <button class="btn danger" id="btn-reset">Réinitialiser cache local</button>
     </div>
-    <div class="section-title">Compte</div>
-    <div class="stack">
-      <div class="row">
-        <input class="input" id="admin-email" placeholder="email admin" />
-        <button class="btn inline" id="btn-login">Connexion (lien)</button>
-      </div>
-      <button class="btn" id="btn-logout">Déconnexion</button>
-      <div class="small"><span id="auth-status">Non connecté</span> <span id="role-status"></span></div>
-    </div>
+
     <div style="height:12px"></div>
     <button class="btn" id="drawer-close">Fermer</button>
   </div>
@@ -149,17 +157,17 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
   <section id="view-admin" style="display:none">
     <div class="card">
       <h3>Administration</h3>
-      <p class="note">Modifier le mapping <b>UID ↔ Casier</b>, créer de 001→130, importer/exporter.</p>
+      <p class="note">Modifier le mapping <b>UID ↔ Casier</b>. Les outils (création 001→130, import/export, ajout) sont <b>réservés aux admins</b>.</p>
 
       <div class="searchbar">
         <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
-        <button class="btn inline" id="btn-add-card">Ajouter une ligne</button>
-        <button class="btn inline accent" id="btn-create-001-130">001→130</button>
+        <button class="btn inline" id="btn-add-card" data-adminonly>Ajouter une ligne</button>
+        <button class="btn inline accent" id="btn-create-001-130" data-adminonly>Créer 001 → 130</button>
       </div>
 
       <div id="cards" class="cards"></div>
 
-      <div class="card" style="margin-top:12px">
+      <div class="card" style="margin-top:12px" data-adminonly>
         <h3>Import / Export (cache local)</h3>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <button class="btn inline accent" id="btn-export-json">Exporter JSON</button>
@@ -169,7 +177,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
         </div>
         <div style="height:8px"></div>
         <textarea id="import-area" class="input" placeholder='Colle JSON [{"locker":101,"uid":"ABC123"}] ou CSV locker,uid'></textarea>
-        <p class="note">Les imports écrivent dans le <b>cache local</b>. Utilise 💾 pour pousser vers Firestore.</p>
+        <p class="note">Les imports écrivent dans le <b>cache local</b>. Utilise 💾 sur chaque ligne pour pousser vers Firestore.</p>
       </div>
     </div>
   </section>
@@ -192,7 +200,7 @@ body{margin:0;background:linear-gradient(180deg,#0b0d12,#0f1320);color:var(--tex
 /* Firebase v9 */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, orderBy, where, onSnapshot, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAZ7M8dUKqcUwa9rDyWEdHEwnFVPlrpCds",
@@ -229,13 +237,20 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v3";
+const LS_KEY="hedo_lockers_cache_v4";
 let state = { map: [], isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
 const normalize = (s)=> (s||"").trim();
 const showLocker = (locker)=> document.getElementById("kiosk-content").innerHTML =
   locker ? `<div class="note">Votre casier est le</div><div class="big">#${String(locker).padStart(3,"0")}</div>` : `<span class="note">Aucun casier trouvé.</span>`;
+
+/* Toggle UI for admins */
+function setAdminUI(isAdmin){
+  document.querySelectorAll("[data-adminonly]").forEach(el=>{
+    el.style.display = isAdmin ? "" : "none";
+  });
+}
 
 /* ===== Firestore DAO ===== */
 const LOCKERS = () => collection(db,"lockers");
@@ -272,36 +287,37 @@ function startRealtime(){
   });
 }
 
-/* ===== Auth ===== */
+/* ===== Auth (email + mot de passe) ===== */
 const emailInput = document.getElementById("admin-email");
-const btnLogin = document.getElementById("btn-login");
-const btnLogout = document.getElementById("btn-logout");
+const passInput  = document.getElementById("admin-pass");
+const btnLogin   = document.getElementById("btn-login");
+const btnLogout  = document.getElementById("btn-logout");
 const authStatus = document.getElementById("auth-status");
 const roleStatus = document.getElementById("role-status");
 
 btnLogin.onclick = async ()=>{
-  const email = normalize(emailInput.value);
-  if(!email) return alert("Entre un email.");
-  await sendSignInLinkToEmail(auth, email, { url: window.location.href, handleCodeInApp: true });
-  localStorage.setItem("hedo_email", email);
-  alert("Lien envoyé à " + email);
-};
-btnLogout.onclick = ()=>signOut(auth);
-
-window.addEventListener("load", async ()=>{
-  if (isSignInWithEmailLink(auth, window.location.href)) {
-    const saved = localStorage.getItem("hedo_email") || prompt("Email ?");
-    await signInWithEmailLink(auth, saved, window.location.href);
-    localStorage.removeItem("hedo_email");
+  try{
+    const email = normalize(emailInput.value);
+    const pass  = normalize(passInput.value);
+    if(!email || !pass) return alert("Email et mot de passe requis.");
+    await signInWithEmailAndPassword(auth, email, pass);
+    drawer.classList.remove("open");
+  }catch(e){
+    alert("Erreur connexion : " + (e.message || e));
   }
-});
+};
+btnLogout.onclick = ()=> signOut(auth);
 
 onAuthStateChanged(auth, async (user)=>{
   authStatus.textContent = user ? `Connecté: ${user.email}` : "Non connecté";
   state.uid = user ? user.uid : null;
   state.isAdmin = false;
-  if (user){ const d = await getDoc(ADMINS(user.uid)); state.isAdmin = d.exists(); }
+  if (user){
+    const d = await getDoc(ADMINS(user.uid));
+    state.isAdmin = d.exists();
+  }
   roleStatus.textContent = state.isAdmin ? "• Admin" : "";
+  setAdminUI(state.isAdmin);
   renderCards();
 });
 
@@ -318,14 +334,14 @@ function renderCards(){
     const card = document.createElement("div");
     card.className = "acard";
     card.innerHTML = `
-      <div class="row" style="justify-content:space-between">
-        <div><div class="lbl">Casier</div><input class="input locker" value="${String(r.locker).padStart(3,'0')}" /></div>
-        <div style="min-width:140px"><div class="lbl">UID</div><input class="input uid" value="${r.uid||""}" placeholder="Scanner…" /></div>
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="flex:0 0 120px"><div class="lbl">Casier</div><input class="input locker" value="${String(r.locker).padStart(3,'0')}" /></div>
+        <div style="flex:1"><div class="lbl">UID</div><input class="input uid" value="${r.uid||""}" placeholder="Scanner…" /></div>
       </div>
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:6px">
-          <button class="btn inline" data-act="scan">Scanner ici</button>
-          <button class="btn inline danger" data-act="clear">Vider</button>
+          <button class="btn inline" data-act="scan" ${state.isAdmin?"":"disabled"}>Scanner ici</button>
+          <button class="btn inline danger" data-act="clear" ${state.isAdmin?"":"disabled"}>Vider</button>
         </div>
         <div class="row" style="gap:6px">
           <button class="btn inline accent" data-act="save" ${state.isAdmin?"":"disabled"}>💾 Enregistrer</button>
@@ -338,11 +354,12 @@ function renderCards(){
     const uidEl = card.querySelector(".uid");
 
     card.querySelector('[data-act="scan"]').onclick = ()=>{
+      if(!state.isAdmin) return;
       uidEl.focus(); uidEl.value="";
       const handler=(e)=>{ if(e.key==="Enter"){ uidEl.value = normalize(uidEl.value); document.removeEventListener("keydown",handler,true);} };
       document.addEventListener("keydown", handler, true);
     };
-    card.querySelector('[data-act="clear"]').onclick = ()=>{ uidEl.value=""; };
+    card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAdmin) uidEl.value=""; };
 
     card.querySelector('[data-act="save"]').onclick = async ()=>{
       if(!state.isAdmin) return alert("Réservé aux admins.");
@@ -361,6 +378,7 @@ function renderCards(){
 search?.addEventListener("input", renderCards);
 
 document.getElementById("btn-add-card").onclick = ()=>{
+  if(!state.isAdmin) return alert("Réservé aux admins.");
   state.map.push({ locker:0, uid:"" }); renderCards();
 };
 document.getElementById("btn-create-001-130").onclick = async ()=>{
@@ -369,26 +387,29 @@ document.getElementById("btn-create-001-130").onclick = async ()=>{
   try{ await dbCreateRange001to130(); alert("Casiers 001→130 créés/rafraîchis."); }catch(e){ alert("Erreur: "+(e.message||e)); }
 };
 
-/* ===== Import / Export (local cache) & Drawer binds ===== */
+/* ===== Import / Export (local cache) & Drawer binds (admin only) ===== */
 const area = document.getElementById("import-area");
 function downloadText(filename, text){
   const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
   document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0);
 }
-function exportJSON(){ downloadText("hedo-lockers.json", JSON.stringify(state.map,null,2)); }
+function exportJSON(){ if(!state.isAdmin) return alert("Admins seulement."); downloadText("hedo-lockers.json", JSON.stringify(state.map,null,2)); }
 function exportCSV(){
+  if(!state.isAdmin) return alert("Admins seulement.");
   const rows=[["locker","uid"],...state.map.map(r=>[r.locker,r.uid||""])];
   const csv=rows.map(r=>r.map(c=>String(c).replace(/"/g,'""')).join(",")).join("\n");
   downloadText("hedo-lockers.csv", csv);
 }
 function importJSON(){
+  if(!state.isAdmin) return alert("Admins seulement.");
   try{ const arr=JSON.parse(area.value); if(!Array.isArray(arr)) throw new Error("JSON invalide");
     state.map=arr.map(o=>({locker:Number(o.locker),uid:normalize(o.uid||"")})).filter(o=>o.locker);
     saveLocal(); renderCards(); alert("Import local OK");
   }catch(e){ alert("Erreur: "+e.message); }
 }
 function importCSV(){
+  if(!state.isAdmin) return alert("Admins seulement.");
   try{ const lines=area.value.trim().split(/\r?\n/); const out=[];
     for(let i=0;i<lines.length;i++){ const line=lines[i].trim(); if(!line)continue;
       const parts=line.split(","); if(i===0 && /locker/i.test(parts[0])) continue;
@@ -491,11 +512,9 @@ document.getElementById("btn-reset").onclick = ()=>{
 };
 
 /* ===== Boot ===== */
-loadLocal(); renderCards(); startRealtime();
-</script>
+loadLocal(); setAdminUI(false); renderCards(); startRealtime();
 
-<!-- SW registration -->
-<script>
+/* ===== SW ===== */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
