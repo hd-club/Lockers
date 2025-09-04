@@ -161,6 +161,57 @@ input, select, textarea, button { font-size:16px; }
       <button class="btn danger" id="btn-reset">Réinitialiser cache local</button>
     </div>
 
+    <!-- ===== Nouveau : FORMAT LECTEUR RFID ===== -->
+    <div class="section-title">Format lecteur RFID</div>
+    <div class="stack">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-prefix" placeholder="Préfixe à retirer (ex: %;STX)" style="flex:1 1 180px" />
+        <input class="input" id="fmt-suffix" placeholder="Suffixe à retirer (ex: ?;ETX)" style="flex:1 1 180px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-cut-start" type="number" min="0" placeholder="Couper N premiers" style="width:160px" />
+        <input class="input" id="fmt-cut-end" type="number" min="0" placeholder="Couper N derniers" style="width:160px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-delim" placeholder="Délimiteur (ex: , ; |)" style="flex:1 1 160px" />
+        <input class="input" id="fmt-seg-index" type="number" min="0" placeholder="Segment # (0=1er)" style="width:160px" />
+      </div>
+      <input class="input" id="fmt-regex" placeholder="Regex capture (ex: ^\\d{2}(\\w+)$ → groupe 1)" />
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <label class="small"><input type="checkbox" id="fmt-keep-alnum" checked /> Garder A-Z0-9</label>
+        <label class="small"><input type="checkbox" id="fmt-upper" checked /> Majuscules</label>
+        <label class="small"><input type="checkbox" id="fmt-hex2dec" /> Hex → Décimal</label>
+        <label class="small"><input type="checkbox" id="fmt-dec2hex" /> Décimal → Hex</label>
+        <input class="input" id="fmt-hex-pad" type="number" min="0" placeholder="Hex padding (ex: 8)" style="width:160px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <select class="input" id="fmt-wiegand-mode" style="flex:1 1 180px">
+          <option value="off">Wiegand: désactivé</option>
+          <option value="w26">Wiegand 26 (entrée décimale/hex)</option>
+          <option value="w34">Wiegand 34 (entrée décimale/hex)</option>
+        </select>
+        <select class="input" id="fmt-wiegand-in" style="flex:1 1 180px">
+          <option value="dec">Entrée: décimal</option>
+          <option value="hex">Entrée: hex</option>
+        </select>
+        <select class="input" id="fmt-wiegand-out" style="flex:1 1 200px">
+          <option value="fc-cn">Sortie: FC-CN</option>
+          <option value="card">Sortie: CN (card)</option>
+          <option value="fc_card">Sortie: FC.CN</option>
+        </select>
+      </div>
+      <input class="input" id="fmt-template" placeholder="Gabarit sortie (ex: {norm} / {hex} / {dec} / {fc}-{cn})" />
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-test-in" placeholder="Tester avec une valeur lue…" style="flex:1 1 240px" />
+        <button class="btn" id="fmt-test-run">Tester</button>
+      </div>
+      <div class="small">Résultat : <code id="fmt-test-out">—</code></div>
+      <div class="row" style="gap:8px">
+        <button class="btn" id="fmt-save">💾 Enregistrer format</button>
+        <button class="btn ghost" id="fmt-reset">Réinitialiser</button>
+      </div>
+    </div>
+
     <div style="height:12px"></div>
     <button class="btn block" id="drawer-close">Fermer</button>
   </div>
@@ -268,7 +319,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v10";
+const LS_KEY="hedo_lockers_cache_v11";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -417,6 +468,7 @@ function renderCards(){
         <div class="row" style="gap:6px">
           <button class="btn inline" data-act="scan-kb" ${state.isAuthed?"":"disabled"}>Scanner (clavier)</button>
           <button class="btn inline" data-act="scan-cam" ${state.isAuthed?"":"disabled"}>📷 Scanner (caméra)</button>
+          <button class="btn inline" data-act="convert" ${state.isAuthed?"":"disabled"}>🔁 Convertir</button>
           <button class="btn inline ghost" data-act="clear" ${state.isAuthed?"":"disabled"}>Vider UID</button>
         </div>
         <div class="row" style="gap:6px">
@@ -438,12 +490,21 @@ function renderCards(){
       document.addEventListener("keydown", handler, true);
     };
 
-    // Scanner caméra → remplit l'UID de cette carte
+    // Scanner caméra → remplit l'UID de cette carte (valeur convertie)
     card.querySelector('[data-act="scan-cam"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
       scanTargetInput = uidEl;
       if(!cameraRunning) await startCamera();
     };
+
+    // Convertir manuellement le contenu UID
+    const btnConvert = card.querySelector('[data-act="convert"]');
+    if (btnConvert){
+      btnConvert.onclick = ()=>{
+        fmt = loadFmt();
+        uidEl.value = convertRFID(uidEl.value || "");
+      };
+    }
 
     // Vider UID
     card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAuthed) uidEl.value=""; };
@@ -607,7 +668,181 @@ fileInput.addEventListener("change", async (e)=>{
   }
 });
 
-/* ===== Kiosk – scan clavier ===== */
+/* ======= FORMAT LECTEUR RFID (conversion configurable) ======= */
+const LS_FMT = "hedo_rfid_format_v1";
+const fmtEl = {
+  prefix: document.getElementById("fmt-prefix"),
+  suffix: document.getElementById("fmt-suffix"),
+  cutStart: document.getElementById("fmt-cut-start"),
+  cutEnd: document.getElementById("fmt-cut-end"),
+  delim: document.getElementById("fmt-delim"),
+  segIndex: document.getElementById("fmt-seg-index"),
+  regex: document.getElementById("fmt-regex"),
+  keepAlnum: document.getElementById("fmt-keep-alnum"),
+  upper: document.getElementById("fmt-upper"),
+  hex2dec: document.getElementById("fmt-hex2dec"),
+  dec2hex: document.getElementById("fmt-dec2hex"),
+  hexPad: document.getElementById("fmt-hex-pad"),
+  wMode: document.getElementById("fmt-wiegand-mode"),
+  wIn: document.getElementById("fmt-wiegand-in"),
+  wOut: document.getElementById("fmt-wiegand-out"),
+  tpl: document.getElementById("fmt-template"),
+  tIn: document.getElementById("fmt-test-in"),
+  tOut: document.getElementById("fmt-test-out"),
+  tRun: document.getElementById("fmt-test-run"),
+  save: document.getElementById("fmt-save"),
+  reset: document.getElementById("fmt-reset"),
+};
+
+const defaultFmt = {
+  prefix:"", suffix:"", cutStart:0, cutEnd:0,
+  delim:"", segIndex:0, regex:"",
+  keepAlnum:true, upper:true,
+  hex2dec:false, dec2hex:false, hexPad:0,
+  wMode:"off", wIn:"dec", wOut:"fc-cn",
+  tpl:"{norm}"
+};
+
+function loadFmt(){
+  try{
+    const o = JSON.parse(localStorage.getItem(LS_FMT) || "null") || defaultFmt;
+    fmtEl.prefix.value = o.prefix || ""; fmtEl.suffix.value = o.suffix || "";
+    fmtEl.cutStart.value = o.cutStart || 0; fmtEl.cutEnd.value = o.cutEnd || 0;
+    fmtEl.delim.value = o.delim || ""; fmtEl.segIndex.value = o.segIndex || 0;
+    fmtEl.regex.value = o.regex || "";
+    fmtEl.keepAlnum.checked = !!o.keepAlnum; fmtEl.upper.checked = !!o.upper;
+    fmtEl.hex2dec.checked = !!o.hex2dec; fmtEl.dec2hex.checked = !!o.dec2hex;
+    fmtEl.hexPad.value = o.hexPad || 0;
+    fmtEl.wMode.value = o.wMode || "off"; fmtEl.wIn.value = o.wIn || "dec"; fmtEl.wOut.value = o.wOut || "fc-cn";
+    fmtEl.tpl.value = o.tpl || "{norm}";
+    return o;
+  }catch{ return defaultFmt; }
+}
+function saveFmt(){
+  const o = {
+    prefix: fmtEl.prefix.value || "",
+    suffix: fmtEl.suffix.value || "",
+    cutStart: Number(fmtEl.cutStart.value||0),
+    cutEnd: Number(fmtEl.cutEnd.value||0),
+    delim: fmtEl.delim.value || "",
+    segIndex: Number(fmtEl.segIndex.value||0),
+    regex: fmtEl.regex.value || "",
+    keepAlnum: !!fmtEl.keepAlnum.checked,
+    upper: !!fmtEl.upper.checked,
+    hex2dec: !!fmtEl.hex2dec.checked,
+    dec2hex: !!fmtEl.dec2hex.checked,
+    hexPad: Number(fmtEl.hexPad.value||0),
+    wMode: fmtEl.wMode.value || "off",
+    wIn: fmtEl.wIn.value || "dec",
+    wOut: fmtEl.wOut.value || "fc-cn",
+    tpl: fmtEl.tpl.value || "{norm}"
+  };
+  localStorage.setItem(LS_FMT, JSON.stringify(o));
+  return o;
+}
+let fmt = loadFmt();
+fmtEl.save?.addEventListener("click", ()=>{ fmt = saveFmt(); alert("Format enregistré."); });
+fmtEl.reset?.addEventListener("click", ()=>{
+  localStorage.removeItem(LS_FMT); fmt = loadFmt(); alert("Format réinitialisé.");
+});
+
+// Conversion principale
+function convertRFID(raw){
+  let s = (raw ?? "").toString();
+
+  // Préfixe/suffixe
+  if (fmt.prefix && s.startsWith(fmt.prefix)) s = s.slice(fmt.prefix.length);
+  if (fmt.suffix && s.endsWith(fmt.suffix)) s = s.slice(0, -fmt.suffix.length);
+
+  // Couper début/fin
+  const cs = Math.max(0, Number(fmt.cutStart||0));
+  const ce = Math.max(0, Number(fmt.cutEnd||0));
+  if (cs) s = s.slice(cs);
+  if (ce) s = s.slice(0, s.length - ce);
+
+  // Délimiteur / segment
+  if (fmt.delim){
+    const parts = s.split(fmt.delim);
+    const idx = Math.max(0, Number(fmt.segIndex||0));
+    if (parts[idx] != null) s = parts[idx];
+  }
+
+  // Regex capture (groupe 1)
+  if (fmt.regex){
+    try{
+      const m = new RegExp(fmt.regex).exec(s);
+      if (m && m[1] != null) s = m[1];
+    }catch{}
+  }
+
+  // Nettoyage + casse
+  if (fmt.keepAlnum) s = s.replace(/[^0-9a-zA-Z]/g, "");
+  s = fmt.upper ? s.toUpperCase() : s.toLowerCase();
+
+  // Hex ⇆ Dec
+  let valDec = null, valHex = null;
+  if (fmt.hex2dec){
+    const hex = s.replace(/^0x/i,"");
+    const n = parseInt(hex, 16);
+    if (!Number.isNaN(n)){ valDec = n; s = String(n); }
+  } else if (fmt.dec2hex){
+    const n = parseInt(s, 10);
+    if (!Number.isNaN(n)){
+      let h = n.toString(16);
+      const pad = Math.max(0, Number(fmt.hexPad||0));
+      if (pad) h = h.padStart(pad, "0");
+      s = (fmt.upper ? h.toUpperCase() : h.toLowerCase());
+      valHex = s;
+    }
+  }
+
+  // Wiegand 26/34 (optionnel)
+  let fc = null, cn = null;
+  if (fmt.wMode !== "off"){
+    let n;
+    if (fmt.wIn === "hex") n = parseInt(s.replace(/^0x/i,""), 16);
+    else n = parseInt(s, 10);
+
+    if (!Number.isNaN(n)){
+      if (fmt.wMode === "w26"){
+        const data24 = (n >>> 1) & 0xFFFFFF; // ignore parités
+        fc = (data24 >>> 16) & 0xFF;
+        cn = data24 & 0xFFFF;
+      } else if (fmt.wMode === "w34"){
+        const data32 = (n >>> 1) >>> 0;
+        fc = (data32 >>> 16) & 0xFFFF;
+        cn = data32 & 0xFFFF;
+      }
+      if (fmt.wOut === "fc-cn" && fc != null && cn != null) s = `${fc}-${cn}`;
+      else if (fmt.wOut === "fc_card" && fc != null && cn != null) s = `${fc}.${cn}`;
+      else if (fmt.wOut === "card" && cn != null) s = String(cn);
+    }
+  }
+
+  // Gabarit
+  const out = (fmt.tpl || "{norm}")
+    .replace(/{raw}/g, (raw ?? "").toString())
+    .replace(/{norm}/g, s)
+    .replace(/{hex}/g, (valHex != null ? valHex : (()=>{ try{
+      const n = parseInt(s,10); if(!Number.isNaN(n)) return (fmt.upper?n.toString(16).toUpperCase():n.toString(16));
+    }catch{} return ""; })()))
+    .replace(/{dec}/g, (valDec != null ? String(valDec) : (()=>{ try{
+      const n = parseInt(s,fmt.dec2hex?16:10); if(!Number.isNaN(n)) return String(n);
+    }catch{} return ""; })()))
+    .replace(/{fc}/g, fc != null ? String(fc) : "")
+    .replace(/{cn}/g, cn != null ? String(cn) : "");
+
+  return (out || s).trim();
+}
+
+// Test live
+fmtEl.tRun?.addEventListener("click", ()=>{
+  fmt = saveFmt();
+  const r = convertRFID(fmtEl.tIn.value || "");
+  fmtEl.tOut.textContent = r || "—";
+});
+
+/* ===== Kiosk – scan clavier (avec conversion) ===== */
 const hiddenInput = document.getElementById("hidden-capture");
 let buffer="";
 function focusCapture(){ hiddenInput.focus(); }
@@ -620,9 +855,13 @@ document.addEventListener("click",(e)=>{ if(viewKiosk.contains(e.target)) setTim
 focusCapture();
 
 async function onScan(raw){
-  const token = normalize(raw);
-  if(!token || token.length<3) return;
+  // Conversion normalisée
+  fmt = loadFmt();
+  const token0 = normalize(raw);
+  const token = convertRFID(token0);
+  if(!token || token.length<1) return;
 
+  // Mode Admin ciblé ?
   if (scanTargetInput){
     scanTargetInput.value = token;
     if (navigator.vibrate) navigator.vibrate(60);
@@ -631,6 +870,7 @@ async function onScan(raw){
     return;
   }
 
+  // Mode Kiosk : recherche casier
   const row = state.map.find(r => (r.uid||"") === token);
   if (row){ showLocker(row.locker); return; }
   try{ const locker = await dbFindByUID(token); showLocker(locker); }catch{ showLocker(null); }
@@ -678,7 +918,7 @@ async function warmUpPermission(){
   gum.getTracks().forEach(t=>t.stop());
 }
 
-/* Start camera + decoder */
+/* Start camera + decoder (et conversion injectée via handleDecodedText→onScan) */
 async function startCamera(){
   try{
     setCamStatus("warn","permission…");
@@ -768,14 +1008,21 @@ function startJsQRLoop(videoEl){
 }
 
 async function handleDecodedText(text){
-  const token = (text||"").trim();
-  if (!token) return;
-  if (scanTargetInput){ scanTargetInput.value = token; return; }
-  if (typeof onScan === "function"){ onScan(token); }
+  // Conversion appliquée ici pour les scans caméra (Admin + Kiosk)
+  fmt = loadFmt();
+  const converted = convertRFID(text || "");
+  if (!converted) return;
+  if (scanTargetInput){
+    scanTargetInput.value = converted; // injecte la valeur convertie dans le champ UID ciblé
+    return;
+  }
+  if (typeof onScan === "function"){ onScan(converted); } // Kiosk
 }
 
 /* Buttons */
+const fabCamera = document.getElementById("fab-camera");
 fabCamera.onclick = async ()=>{ if (cameraRunning) await stopCamera(); else await startCamera(); };
+const camRestartBtn = document.getElementById("cam-restart");
 camRestartBtn?.addEventListener("click", ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); });
 
 /* Resume after background */
