@@ -319,7 +319,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v11";
+const LS_KEY="hedo_lockers_cache_v12";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -668,7 +668,7 @@ fileInput.addEventListener("change", async (e)=>{
   }
 });
 
-/* ======= FORMAT LECTEUR RFID (conversion configurable) ======= */
+/* ======= FORMAT LECTEUR RFID (conversion configurable + pré-mapping clavier) ======= */
 const LS_FMT = "hedo_rfid_format_v1";
 const fmtEl = {
   prefix: document.getElementById("fmt-prefix"),
@@ -746,9 +746,28 @@ fmtEl.reset?.addEventListener("click", ()=>{
   localStorage.removeItem(LS_FMT); fmt = loadFmt(); alert("Format réinitialisé.");
 });
 
-// Conversion principale
+/* --- PREMAP CLAVIER → CHIFFRES (AZERTY FR + variantes) --- */
+function mapKeyboardToDigits(str){
+  if (!str) return "";
+  const map = {
+    // Ligne chiffres azerty sans Shift: & é " ' ( - è _ ç à
+    "&":"1","é":"2",'"':"3","'":"4","(":"5","-":"6","è":"7","_":"8","ç":"9","à":"0",
+    // Majuscules / variantes
+    "É":"2","È":"7","Ç":"9","À":"0",
+    // Combinaisons shift usuelles
+    "!":"1", // shift+&
+    // Layout DE/CH: '§' (souvent Shift+3)
+    "§":"3"
+  };
+  let out = "";
+  for (const ch of str) out += (map[ch] ?? ch);
+  return out;
+}
+
+// Conversion principale (inclut le pré-mapping clavier)
 function convertRFID(raw){
-  let s = (raw ?? "").toString();
+  // Pré-mapping clavier -> chiffres
+  let s = mapKeyboardToDigits((raw ?? "").toString());
 
   // Préfixe/suffixe
   if (fmt.prefix && s.startsWith(fmt.prefix)) s = s.slice(fmt.prefix.length);
@@ -918,7 +937,7 @@ async function warmUpPermission(){
   gum.getTracks().forEach(t=>t.stop());
 }
 
-/* Start camera + decoder (et conversion injectée via handleDecodedText→onScan) */
+/* Start camera + decoder (conversion via handleDecodedText→onScan) */
 async function startCamera(){
   try{
     setCamStatus("warn","permission…");
