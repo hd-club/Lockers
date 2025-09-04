@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<!-- Anti-zoom iOS + safe-area -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>Hedo Lockers</title>
 
 <!-- PWA -->
@@ -12,8 +13,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
-<!-- Fallback QR decoder (no ZXing) -->
+<!-- QR fallback (no ZXing) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<!-- SheetJS for Excel/CSV import -->
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 :root{
@@ -29,7 +32,12 @@ body{
 }
 .hidden{position:absolute;left:-9999px}
 
-/* Top bar (safe-area) */
+/* Empêche le zoom iOS au focus (>=16px) */
+input, select, textarea, button { font-size:16px; }
+.input { font-size:16px; }
+.btn   { font-size:16px; }
+
+/* Top bar */
 .topbar{position:sticky;top:0;z-index:50;background:rgba(15,17,25,.88);backdrop-filter:blur(10px);
   border-bottom:1px solid var(--border); padding-top: env(safe-area-inset-top)}
 .toprow{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
@@ -41,16 +49,16 @@ body{
 .dot.ok{background:var(--ok)} .dot.err{background:var(--err)}
 .hamb{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:10px}
 
-/* Drawer (hamburger menu) */
+/* Drawer (descendre un peu le contenu) */
 .drawer{position:fixed;inset:0 0 0 auto;width:86%;max-width:420px;background:rgba(12,14,20,.94);backdrop-filter:blur(10px);
         transform:translateX(100%);transition:.25s;z-index:60;border-left:1px solid var(--border);
         padding-bottom: calc(env(safe-area-inset-bottom) + 12px)}
 .drawer.open{transform:translateX(0)}
-.drawer .panel{padding:14px}
-.section-title{font-size:12px;color:var(--muted);margin:8px 0}
+.drawer .panel{padding:28px 14px 14px}
+.section-title{font-size:12px;color:var(--muted);margin:16px 0 8px}
 
-/* Content */
-.container{padding:14px 14px calc(80px + env(safe-area-inset-bottom))}
+/* Content (mêmes gabarits admin/kiosk) */
+.container{padding:14px 14px calc(80px + env(safe-area-inset-bottom)); max-width:900px; margin:0 auto;}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
 .card h3{margin:0 0 8px 0}
 .note{font-size:12px;color:var(--muted)}
@@ -63,11 +71,11 @@ body{
 .btn.ghost{background:transparent;border:1px dashed var(--border)}
 .btn[disabled]{opacity:.6;cursor:not-allowed}
 
-/* Kiosk box */
-.kioskbox{display:flex;align-items:center;justify-content:center;min-height:230px;border:2px dashed var(--border);border-radius:14px}
-.big{font-size:56px;font-weight:900;color:var(--accent);letter-spacing:1px}
+/* Kiosk aligné au design iPhone */
+.kioskbox{display:flex;align-items:center;justify-content:center;min-height:280px;border:2px dashed var(--border);border-radius:14px}
+.big{font-size:56px;font-weight:900;color:var(--accent);letter-spacing:1px; line-height:1.05}
 
-/* Admin list as cards */
+/* Admin list */
 .searchbar{display:flex;gap:10px;align-items:center;margin:8px 0;flex-wrap:wrap}
 .cards{display:grid;grid-template-columns:1fr;gap:10px}
 @media(min-width:520px){ .cards{ grid-template-columns:1fr 1fr } }
@@ -85,7 +93,7 @@ body{
   pointer-events:none; z-index:-1;
 }
 
-/* Bottom nav (safe-area) */
+/* Bottom nav */
 .bnav{position:fixed;left:0;right:0;bottom:0;z-index:55;background:rgba(15,17,25,.92);backdrop-filter:blur(10px);border-top:1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom)}
 .bwrap{display:flex}
@@ -98,7 +106,7 @@ body{
 .fab.alt{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
 @media(min-width:900px){.fab{bottom:20px}}
 
-/* Auth visibility helpers */
+/* Auth visibility */
 [data-authonly]{display:none}
 [data-authonly].show{display:initial}
 </style>
@@ -126,6 +134,9 @@ body{
     <div class="stack">
       <input class="input" id="admin-email" placeholder="email" autocomplete="username" />
       <input class="input" id="admin-pass" type="password" placeholder="mot de passe" autocomplete="current-password" />
+      <label class="small" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="remember-me" /> Se souvenir de moi sur cet appareil
+      </label>
       <div class="row" style="gap:8px">
         <button class="btn inline" id="btn-login">Connexion</button>
         <button class="btn inline" id="btn-logout">Déconnexion</button>
@@ -140,12 +151,65 @@ body{
       <button class="btn" id="drawer-export-csv">Exporter CSV</button>
       <button class="btn" id="drawer-import-json">Importer JSON (local)</button>
       <button class="btn" id="drawer-import-csv">Importer CSV (local)</button>
+      <!-- Import fichier -->
+      <button class="btn" id="drawer-import-file">Importer un fichier…</button>
     </div>
 
     <div class="section-title">Caméra & cache</div>
     <div class="stack">
       <button class="btn" id="cam-restart">Relancer caméra</button>
       <button class="btn danger" id="btn-reset">Réinitialiser cache local</button>
+    </div>
+
+    <!-- ===== Nouveau : FORMAT LECTEUR RFID ===== -->
+    <div class="section-title">Format lecteur RFID</div>
+    <div class="stack">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-prefix" placeholder="Préfixe à retirer (ex: %;STX)" style="flex:1 1 180px" />
+        <input class="input" id="fmt-suffix" placeholder="Suffixe à retirer (ex: ?;ETX)" style="flex:1 1 180px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-cut-start" type="number" min="0" placeholder="Couper N premiers" style="width:160px" />
+        <input class="input" id="fmt-cut-end" type="number" min="0" placeholder="Couper N derniers" style="width:160px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-delim" placeholder="Délimiteur (ex: , ; |)" style="flex:1 1 160px" />
+        <input class="input" id="fmt-seg-index" type="number" min="0" placeholder="Segment # (0=1er)" style="width:160px" />
+      </div>
+      <input class="input" id="fmt-regex" placeholder="Regex capture (ex: ^\\d{2}(\\w+)$ → groupe 1)" />
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <label class="small"><input type="checkbox" id="fmt-keep-alnum" checked /> Garder A-Z0-9</label>
+        <label class="small"><input type="checkbox" id="fmt-upper" checked /> Majuscules</label>
+        <label class="small"><input type="checkbox" id="fmt-hex2dec" /> Hex → Décimal</label>
+        <label class="small"><input type="checkbox" id="fmt-dec2hex" /> Décimal → Hex</label>
+        <input class="input" id="fmt-hex-pad" type="number" min="0" placeholder="Hex padding (ex: 8)" style="width:160px" />
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <select class="input" id="fmt-wiegand-mode" style="flex:1 1 180px">
+          <option value="off">Wiegand: désactivé</option>
+          <option value="w26">Wiegand 26 (entrée décimale/hex)</option>
+          <option value="w34">Wiegand 34 (entrée décimale/hex)</option>
+        </select>
+        <select class="input" id="fmt-wiegand-in" style="flex:1 1 180px">
+          <option value="dec">Entrée: décimal</option>
+          <option value="hex">Entrée: hex</option>
+        </select>
+        <select class="input" id="fmt-wiegand-out" style="flex:1 1 200px">
+          <option value="fc-cn">Sortie: FC-CN</option>
+          <option value="card">Sortie: CN (card)</option>
+          <option value="fc_card">Sortie: FC.CN</option>
+        </select>
+      </div>
+      <input class="input" id="fmt-template" placeholder="Gabarit sortie (ex: {norm} / {hex} / {dec} / {fc}-{cn})" />
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="fmt-test-in" placeholder="Tester avec une valeur lue…" style="flex:1 1 240px" />
+        <button class="btn" id="fmt-test-run">Tester</button>
+      </div>
+      <div class="small">Résultat : <code id="fmt-test-out">—</code></div>
+      <div class="row" style="gap:8px">
+        <button class="btn" id="fmt-save">💾 Enregistrer format</button>
+        <button class="btn ghost" id="fmt-reset">Réinitialiser</button>
+      </div>
     </div>
 
     <div style="height:12px"></div>
@@ -173,7 +237,7 @@ body{
   <section id="view-admin" style="display:none">
     <div class="card">
       <h3>Administration</h3>
-      <p class="note">Édite le mapping <b>UID ↔ Casier</b>. En base (Firestore) : <b>admins</b> uniquement.</p>
+      <p class="note">Édite le mapping <b>UID ↔ Casier</b>. En base (Firestore) : <b>admins</b> ou <b>propriétaire</b> du doc.</p>
 
       <div class="searchbar">
         <input class="input" id="search" placeholder="Rechercher (casier, UID)..." />
@@ -190,10 +254,12 @@ body{
           <button class="btn inline" id="btn-export-csv">Exporter CSV</button>
           <button class="btn inline" id="btn-import-json">Importer JSON</button>
           <button class="btn inline" id="btn-import-csv">Importer CSV</button>
+          <button class="btn inline" id="btn-import-file">Importer un fichier…</button>
+          <input id="file-input" type="file" accept=".csv,.xlsx,.xls,.numbers" class="hidden" />
         </div>
         <div style="height:8px"></div>
         <textarea id="import-area" class="input" placeholder='Colle JSON [{"locker":101,"uid":"ABC123"}] ou CSV locker,uid'></textarea>
-        <p class="note">Les imports modifient le <b>cache local</b>. Utilise 💾 pour pousser vers Firestore (admin requis).</p>
+        <p class="note">Les imports modifient le <b>cache local</b>. Utilise 💾 pour pousser vers Firestore (selon tes droits).</p>
       </div>
     </div>
   </section>
@@ -216,7 +282,7 @@ body{
 /* Firebase v9 */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, orderBy, where, onSnapshot, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAZ7M8dUKqcUwa9rDyWEdHEwnFVPlrpCds",
@@ -253,7 +319,7 @@ document.getElementById("drawer-close").onclick = ()=> drawer.classList.remove("
 btnHamb.onclick = ()=> drawer.classList.toggle("open");
 
 /* ===== State / helpers ===== */
-const LS_KEY="hedo_lockers_cache_v8";
+const LS_KEY="hedo_lockers_cache_v12";
 let state = { map: [], isAuthed:false, isAdmin:false, uid:null };
 const saveLocal = ()=> localStorage.setItem(LS_KEY, JSON.stringify({map:state.map}));
 const loadLocal = ()=> { try{const o=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); if(Array.isArray(o.map)) state.map=o.map;}catch{} };
@@ -278,9 +344,21 @@ const padId = (n)=> {
   return String(num).padStart(3,"0"); // 001..999
 };
 
+/* Upsert: ajoute createdBy seulement à la création (owner-based) */
 async function dbUpsert(locker, uid){
-  const id = padId(locker); // évite 1 vs 001
-  await setDoc(LOCKER(id), { locker:Number(locker), uid: uid || null, updatedAt: serverTimestamp() }, { merge:true });
+  const id = padId(locker);
+  const ref = LOCKER(id);
+  const snap = await getDoc(ref);
+
+  const payload = {
+    locker: Number(locker),
+    uid: uid || null,
+    updatedAt: serverTimestamp()
+  };
+  if (!snap.exists()) {
+    payload.createdBy = auth.currentUser ? auth.currentUser.uid : null;
+  }
+  await setDoc(ref, payload, { merge: true });
 }
 async function dbDelete(locker){
   const id = padId(locker);
@@ -300,9 +378,10 @@ function startRealtime(){
   });
 }
 
-/* ===== Auth (email + mot de passe) ===== */
+/* ===== Auth ===== */
 const emailInput = document.getElementById("admin-email");
 const passInput  = document.getElementById("admin-pass");
+const rememberMe = document.getElementById("remember-me");
 const btnLogin   = document.getElementById("btn-login");
 const btnLogout  = document.getElementById("btn-logout");
 const authStatus = document.getElementById("auth-status");
@@ -313,13 +392,32 @@ btnLogin.onclick = async ()=>{
     const email = normalize(emailInput.value);
     const pass  = normalize(passInput.value);
     if(!email || !pass) return alert("Email et mot de passe requis.");
+
+    await setPersistence(auth, rememberMe.checked ? browserLocalPersistence : browserSessionPersistence);
     await signInWithEmailAndPassword(auth, email, pass);
+
+    if (rememberMe.checked) {
+      localStorage.setItem("hedo_last_email", email);
+      localStorage.setItem("hedo_remember", "1");
+    } else {
+      localStorage.removeItem("hedo_last_email");
+      localStorage.removeItem("hedo_remember");
+    }
+
     drawer.classList.remove("open");
   }catch(e){
     alert("Erreur connexion : " + (e.message || e));
   }
 };
 btnLogout.onclick = ()=> signOut(auth);
+
+// Préremplir email/checkbox au chargement
+try{
+  const last = localStorage.getItem("hedo_last_email") || "";
+  const rem  = localStorage.getItem("hedo_remember") === "1";
+  if (last) emailInput.value = last;
+  rememberMe.checked = rem;
+}catch{}
 
 onAuthStateChanged(auth, async (user)=>{
   authStatus.textContent = user ? `Connecté: ${user.email}` : "Non connecté";
@@ -335,10 +433,10 @@ onAuthStateChanged(auth, async (user)=>{
   renderCards();
 });
 
-/* ===== Admin as cards (scan + save/delete + local remove) ===== */
+/* ===== Admin as cards ===== */
 const cards = document.getElementById("cards");
 const search = document.getElementById("search");
-let scanTargetInput = null; // si défini, le prochain QR remplit cet input
+let scanTargetInput = null; // QR → remplit cet input si défini
 
 function renderCards(){
   const q = (search?.value||"").toLowerCase();
@@ -347,12 +445,18 @@ function renderCards(){
 
   cards.innerHTML="";
   rows.forEach(r=>{
+    // Permissions owner/admin
+    const ownerUid = r.createdBy || null;
+    const canDelete = state.isAdmin || (!!ownerUid && ownerUid === state.uid);
+    const canSave   = state.isAdmin || (!!ownerUid && ownerUid === state.uid);
+    const ownerTag  = ownerUid ? (ownerUid === state.uid ? " (moi)" : "") : "";
+
     const card = document.createElement("div");
     card.className = "acard";
     card.innerHTML = `
       <div class="row" style="justify-content:space-between;gap:12px">
         <div style="flex:0 0 120px">
-          <div class="lbl">Casier</div>
+          <div class="lbl">Casier${ownerTag}</div>
           <input class="input locker" value="${String(r.locker).padStart(3,'0')}" ${state.isAuthed?"":"disabled"} />
         </div>
         <div style="flex:1">
@@ -364,12 +468,13 @@ function renderCards(){
         <div class="row" style="gap:6px">
           <button class="btn inline" data-act="scan-kb" ${state.isAuthed?"":"disabled"}>Scanner (clavier)</button>
           <button class="btn inline" data-act="scan-cam" ${state.isAuthed?"":"disabled"}>📷 Scanner (caméra)</button>
+          <button class="btn inline" data-act="convert" ${state.isAuthed?"":"disabled"}>🔁 Convertir</button>
           <button class="btn inline ghost" data-act="clear" ${state.isAuthed?"":"disabled"}>Vider UID</button>
         </div>
         <div class="row" style="gap:6px">
-          <button class="btn inline accent" data-act="save" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Écriture en base = admin'}">💾 Enregistrer</button>
-          <button class="btn inline danger" data-act="del" ${state.isAuthed?"":"disabled"} title="${state.isAdmin?'':'Suppression en base = admin'}">🗑️ Supprimer</button>
-          <button class="btn inline" data-act="remove-local" ${state.isAuthed && !state.isAdmin ? "" : "style='display:none'"}>🧹 Retirer (local)</button>
+          <button class="btn inline accent" data-act="save" ${state.isAuthed && canSave ? "" : "disabled"} title="${canSave?'':'Écriture autorisée: admin ou créateur'}">💾 Enregistrer</button>
+          <button class="btn inline danger" data-act="del" ${state.isAuthed && canDelete ? "" : "disabled"} title="${canDelete?'':'Suppression autorisée: admin ou créateur'}">🗑️ Supprimer</button>
+          <button class="btn inline" data-act="remove-local" ${state.isAuthed && !canDelete ? "" : "style='display:none'"}>🧹 Retirer (local)</button>
         </div>
       </div>`;
     cards.appendChild(card);
@@ -385,35 +490,44 @@ function renderCards(){
       document.addEventListener("keydown", handler, true);
     };
 
-    // Scanner caméra → remplit l'UID de cette carte
+    // Scanner caméra → remplit l'UID de cette carte (valeur convertie)
     card.querySelector('[data-act="scan-cam"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi pour utiliser cet outil.");
       scanTargetInput = uidEl;
       if(!cameraRunning) await startCamera();
     };
 
+    // Convertir manuellement le contenu UID
+    const btnConvert = card.querySelector('[data-act="convert"]');
+    if (btnConvert){
+      btnConvert.onclick = ()=>{
+        fmt = loadFmt();
+        uidEl.value = convertRFID(uidEl.value || "");
+      };
+    }
+
     // Vider UID
     card.querySelector('[data-act="clear"]').onclick = ()=>{ if(state.isAuthed) uidEl.value=""; };
 
-    // Enregistrer (upsert) — pas de doublon (padId)
+    // Enregistrer (upsert) — owner/admin
     card.querySelector('[data-act="save"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-      if(!state.isAdmin) return alert("Écriture en base réservée aux admins.");
+      if(!(state.isAdmin || (r.createdBy && r.createdBy === state.uid))) return alert("Écriture autorisée uniquement pour l’admin ou le créateur.");
       const Lnum = Number(lockerEl.value);
       if(!Lnum) return alert("Numéro de casier invalide.");
       const U = normalize(uidEl.value) || null;
       try{ await dbUpsert(Lnum, U); }catch(e){ alert("Erreur: "+(e.message||e)); }
     };
 
-    // Supprimer (base) — admin
+    // Supprimer (base) — owner/admin
     card.querySelector('[data-act="del"]').onclick = async ()=>{
       if(!state.isAuthed) return alert("Connecte-toi d’abord.");
-      if(!state.isAdmin) return alert("Suppression en base réservée aux admins. Utilise ‘Retirer (local)’.");
+      if(!(state.isAdmin || (r.createdBy && r.createdBy === state.uid))) return alert("Suppression autorisée uniquement pour l’admin ou le créateur.");
       if(!confirm("Supprimer ce casier en base ?")) return;
-      try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Erreur: "+(e.message||e)); }
+      try{ await dbDelete(Number(lockerEl.value)); }catch(e){ alert("Suppression refusée : " + (e.message||e)); }
     };
 
-    // Retirer (local) — pour non-admins
+    // Retirer (local) — pour non-autorisés
     const removeLocalBtn = card.querySelector('[data-act="remove-local"]');
     if (removeLocalBtn){
       removeLocalBtn.onclick = ()=>{
@@ -439,13 +553,13 @@ document.getElementById("btn-create-001-130").onclick = async ()=>{
     const batch = writeBatch(db);
     for(let n=1;n<=130;n++){
       const id = padId(n);
-      batch.set(LOCKER(id), { locker:n, uid:null, updatedAt:serverTimestamp() }, { merge:true });
+      batch.set(LOCKER(id), { locker:n, uid:null, updatedAt:serverTimestamp(), createdBy: auth.currentUser?.uid || null }, { merge:true });
     }
     await batch.commit();
     alert("Casiers 001→130 créés/rafraîchis.");
   }catch(e){ alert("Erreur: "+(e.message||e)); }
 };
-/* Drawer shortcuts */
+/* Drawer shortcut */
 document.getElementById("drawer-create-001-130").onclick = ()=> document.getElementById("btn-create-001-130").click();
 
 /* ===== Import / Export (local cache) ===== */
@@ -489,7 +603,265 @@ document.getElementById("drawer-export-csv").onclick = exportCSV;
 document.getElementById("drawer-import-json").onclick = importJSON;
 document.getElementById("drawer-import-csv").onclick = importCSV;
 
-/* ===== Kiosk – scan clavier ===== */
+/* ===== Import via fichier (CSV / XLSX / XLS) ===== */
+const fileInput = document.getElementById("file-input");
+const btnImportFile = document.getElementById("btn-import-file");
+const drawerImportFile = document.getElementById("drawer-import-file");
+
+function askFile(){ if (!state.isAuthed) { alert("Connecte-toi d’abord."); return; } fileInput.value=""; fileInput.click(); }
+btnImportFile.onclick = askFile;
+drawerImportFile.onclick = askFile;
+
+fileInput.addEventListener("change", async (e)=>{
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const name = (f.name || "").toLowerCase();
+
+  try{
+    if (name.endsWith(".numbers")){
+      alert("Les fichiers .numbers ne peuvent pas être lus directement. Dans Numbers : Fichier → Exporter vers… → CSV (ou Excel), puis réessaie.");
+      return;
+    }
+
+    if (window.XLSX && (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv"))){
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      let rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+
+      const normKey = (s)=> (s||"").toString().trim().toLowerCase().replace(/\s+/g,"");
+      rows = rows.map(r=>{
+        const obj = {};
+        for (const k in r){
+          const nk = normKey(k);
+          if (nk === "locker" || nk === "casier" || nk === "n°" || nk === "numero" || nk === "numéro"){
+            obj.locker = Number(String(r[k]).trim());
+          } else if (nk === "uid" || nk === "code" || nk === "bracelet" || nk === "rfid"){
+            obj.uid = String(r[k]).trim();
+          }
+        }
+        return obj;
+      }).filter(o=>o.locker);
+
+      if (!rows.length){
+        alert("Aucune ligne valide trouvée. Attendu : colonnes ‘locker’ (ou ‘casier’) et ‘uid’.");
+        return;
+      }
+
+      state.map = rows.map(o=>({ locker: Number(o.locker), uid: (o.uid||"").trim() }));
+      saveLocal(); renderCards();
+      alert(`Import depuis fichier : ${state.map.length} lignes chargées (cache local). Utilise 💾 pour pousser vers Firestore (selon tes droits).`);
+      return;
+    }
+
+    if (name.endsWith(".csv")){
+      const text = await f.text();
+      document.getElementById("import-area").value = text;
+      importCSV();
+      return;
+    }
+
+    alert("Format non supporté. Utilise CSV, XLSX ou XLS.");
+  }catch(err){
+    console.error(err);
+    alert("Erreur d’import : " + (err.message || err));
+  }
+});
+
+/* ======= FORMAT LECTEUR RFID (conversion configurable + pré-mapping clavier) ======= */
+const LS_FMT = "hedo_rfid_format_v1";
+const fmtEl = {
+  prefix: document.getElementById("fmt-prefix"),
+  suffix: document.getElementById("fmt-suffix"),
+  cutStart: document.getElementById("fmt-cut-start"),
+  cutEnd: document.getElementById("fmt-cut-end"),
+  delim: document.getElementById("fmt-delim"),
+  segIndex: document.getElementById("fmt-seg-index"),
+  regex: document.getElementById("fmt-regex"),
+  keepAlnum: document.getElementById("fmt-keep-alnum"),
+  upper: document.getElementById("fmt-upper"),
+  hex2dec: document.getElementById("fmt-hex2dec"),
+  dec2hex: document.getElementById("fmt-dec2hex"),
+  hexPad: document.getElementById("fmt-hex-pad"),
+  wMode: document.getElementById("fmt-wiegand-mode"),
+  wIn: document.getElementById("fmt-wiegand-in"),
+  wOut: document.getElementById("fmt-wiegand-out"),
+  tpl: document.getElementById("fmt-template"),
+  tIn: document.getElementById("fmt-test-in"),
+  tOut: document.getElementById("fmt-test-out"),
+  tRun: document.getElementById("fmt-test-run"),
+  save: document.getElementById("fmt-save"),
+  reset: document.getElementById("fmt-reset"),
+};
+
+const defaultFmt = {
+  prefix:"", suffix:"", cutStart:0, cutEnd:0,
+  delim:"", segIndex:0, regex:"",
+  keepAlnum:true, upper:true,
+  hex2dec:false, dec2hex:false, hexPad:0,
+  wMode:"off", wIn:"dec", wOut:"fc-cn",
+  tpl:"{norm}"
+};
+
+function loadFmt(){
+  try{
+    const o = JSON.parse(localStorage.getItem(LS_FMT) || "null") || defaultFmt;
+    fmtEl.prefix.value = o.prefix || ""; fmtEl.suffix.value = o.suffix || "";
+    fmtEl.cutStart.value = o.cutStart || 0; fmtEl.cutEnd.value = o.cutEnd || 0;
+    fmtEl.delim.value = o.delim || ""; fmtEl.segIndex.value = o.segIndex || 0;
+    fmtEl.regex.value = o.regex || "";
+    fmtEl.keepAlnum.checked = !!o.keepAlnum; fmtEl.upper.checked = !!o.upper;
+    fmtEl.hex2dec.checked = !!o.hex2dec; fmtEl.dec2hex.checked = !!o.dec2hex;
+    fmtEl.hexPad.value = o.hexPad || 0;
+    fmtEl.wMode.value = o.wMode || "off"; fmtEl.wIn.value = o.wIn || "dec"; fmtEl.wOut.value = o.wOut || "fc-cn";
+    fmtEl.tpl.value = o.tpl || "{norm}";
+    return o;
+  }catch{ return defaultFmt; }
+}
+function saveFmt(){
+  const o = {
+    prefix: fmtEl.prefix.value || "",
+    suffix: fmtEl.suffix.value || "",
+    cutStart: Number(fmtEl.cutStart.value||0),
+    cutEnd: Number(fmtEl.cutEnd.value||0),
+    delim: fmtEl.delim.value || "",
+    segIndex: Number(fmtEl.segIndex.value||0),
+    regex: fmtEl.regex.value || "",
+    keepAlnum: !!fmtEl.keepAlnum.checked,
+    upper: !!fmtEl.upper.checked,
+    hex2dec: !!fmtEl.hex2dec.checked,
+    dec2hex: !!fmtEl.dec2hex.checked,
+    hexPad: Number(fmtEl.hexPad.value||0),
+    wMode: fmtEl.wMode.value || "off",
+    wIn: fmtEl.wIn.value || "dec",
+    wOut: fmtEl.wOut.value || "fc-cn",
+    tpl: fmtEl.tpl.value || "{norm}"
+  };
+  localStorage.setItem(LS_FMT, JSON.stringify(o));
+  return o;
+}
+let fmt = loadFmt();
+fmtEl.save?.addEventListener("click", ()=>{ fmt = saveFmt(); alert("Format enregistré."); });
+fmtEl.reset?.addEventListener("click", ()=>{
+  localStorage.removeItem(LS_FMT); fmt = loadFmt(); alert("Format réinitialisé.");
+});
+
+/* --- PREMAP CLAVIER → CHIFFRES (AZERTY FR + variantes) --- */
+function mapKeyboardToDigits(str){
+  if (!str) return "";
+  const map = {
+    // Ligne chiffres azerty sans Shift: & é " ' ( - è _ ç à
+    "&":"1","é":"2",'"':"3","'":"4","(":"5","-":"6","è":"7","_":"8","ç":"9","à":"0",
+    // Majuscules / variantes
+    "É":"2","È":"7","Ç":"9","À":"0",
+    // Combinaisons shift usuelles
+    "!":"1", // shift+&
+    // Layout DE/CH: '§' (souvent Shift+3)
+    "§":"3"
+  };
+  let out = "";
+  for (const ch of str) out += (map[ch] ?? ch);
+  return out;
+}
+
+// Conversion principale (inclut le pré-mapping clavier)
+function convertRFID(raw){
+  // Pré-mapping clavier -> chiffres
+  let s = mapKeyboardToDigits((raw ?? "").toString());
+
+  // Préfixe/suffixe
+  if (fmt.prefix && s.startsWith(fmt.prefix)) s = s.slice(fmt.prefix.length);
+  if (fmt.suffix && s.endsWith(fmt.suffix)) s = s.slice(0, -fmt.suffix.length);
+
+  // Couper début/fin
+  const cs = Math.max(0, Number(fmt.cutStart||0));
+  const ce = Math.max(0, Number(fmt.cutEnd||0));
+  if (cs) s = s.slice(cs);
+  if (ce) s = s.slice(0, s.length - ce);
+
+  // Délimiteur / segment
+  if (fmt.delim){
+    const parts = s.split(fmt.delim);
+    const idx = Math.max(0, Number(fmt.segIndex||0));
+    if (parts[idx] != null) s = parts[idx];
+  }
+
+  // Regex capture (groupe 1)
+  if (fmt.regex){
+    try{
+      const m = new RegExp(fmt.regex).exec(s);
+      if (m && m[1] != null) s = m[1];
+    }catch{}
+  }
+
+  // Nettoyage + casse
+  if (fmt.keepAlnum) s = s.replace(/[^0-9a-zA-Z]/g, "");
+  s = fmt.upper ? s.toUpperCase() : s.toLowerCase();
+
+  // Hex ⇆ Dec
+  let valDec = null, valHex = null;
+  if (fmt.hex2dec){
+    const hex = s.replace(/^0x/i,"");
+    const n = parseInt(hex, 16);
+    if (!Number.isNaN(n)){ valDec = n; s = String(n); }
+  } else if (fmt.dec2hex){
+    const n = parseInt(s, 10);
+    if (!Number.isNaN(n)){
+      let h = n.toString(16);
+      const pad = Math.max(0, Number(fmt.hexPad||0));
+      if (pad) h = h.padStart(pad, "0");
+      s = (fmt.upper ? h.toUpperCase() : h.toLowerCase());
+      valHex = s;
+    }
+  }
+
+  // Wiegand 26/34 (optionnel)
+  let fc = null, cn = null;
+  if (fmt.wMode !== "off"){
+    let n;
+    if (fmt.wIn === "hex") n = parseInt(s.replace(/^0x/i,""), 16);
+    else n = parseInt(s, 10);
+
+    if (!Number.isNaN(n)){
+      if (fmt.wMode === "w26"){
+        const data24 = (n >>> 1) & 0xFFFFFF; // ignore parités
+        fc = (data24 >>> 16) & 0xFF;
+        cn = data24 & 0xFFFF;
+      } else if (fmt.wMode === "w34"){
+        const data32 = (n >>> 1) >>> 0;
+        fc = (data32 >>> 16) & 0xFFFF;
+        cn = data32 & 0xFFFF;
+      }
+      if (fmt.wOut === "fc-cn" && fc != null && cn != null) s = `${fc}-${cn}`;
+      else if (fmt.wOut === "fc_card" && fc != null && cn != null) s = `${fc}.${cn}`;
+      else if (fmt.wOut === "card" && cn != null) s = String(cn);
+    }
+  }
+
+  // Gabarit
+  const out = (fmt.tpl || "{norm}")
+    .replace(/{raw}/g, (raw ?? "").toString())
+    .replace(/{norm}/g, s)
+    .replace(/{hex}/g, (valHex != null ? valHex : (()=>{ try{
+      const n = parseInt(s,10); if(!Number.isNaN(n)) return (fmt.upper?n.toString(16).toUpperCase():n.toString(16));
+    }catch{} return ""; })()))
+    .replace(/{dec}/g, (valDec != null ? String(valDec) : (()=>{ try{
+      const n = parseInt(s,fmt.dec2hex?16:10); if(!Number.isNaN(n)) return String(n);
+    }catch{} return ""; })()))
+    .replace(/{fc}/g, fc != null ? String(fc) : "")
+    .replace(/{cn}/g, cn != null ? String(cn) : "");
+
+  return (out || s).trim();
+}
+
+// Test live
+fmtEl.tRun?.addEventListener("click", ()=>{
+  fmt = saveFmt();
+  const r = convertRFID(fmtEl.tIn.value || "");
+  fmtEl.tOut.textContent = r || "—";
+});
+
+/* ===== Kiosk – scan clavier (avec conversion) ===== */
 const hiddenInput = document.getElementById("hidden-capture");
 let buffer="";
 function focusCapture(){ hiddenInput.focus(); }
@@ -502,10 +874,13 @@ document.addEventListener("click",(e)=>{ if(viewKiosk.contains(e.target)) setTim
 focusCapture();
 
 async function onScan(raw){
-  const token = normalize(raw);
-  if(!token || token.length<3) return;
+  // Conversion normalisée
+  fmt = loadFmt();
+  const token0 = normalize(raw);
+  const token = convertRFID(token0);
+  if(!token || token.length<1) return;
 
-  // Mode Admin ciblé : remplir l'UID du champ sélectionné
+  // Mode Admin ciblé ?
   if (scanTargetInput){
     scanTargetInput.value = token;
     if (navigator.vibrate) navigator.vibrate(60);
@@ -514,7 +889,7 @@ async function onScan(raw){
     return;
   }
 
-  // Mode Kiosk : affiche n° de casier
+  // Mode Kiosk : recherche casier
   const row = state.map.find(r => (r.uid||"") === token);
   if (row){ showLocker(row.locker); return; }
   try{ const locker = await dbFindByUID(token); showLocker(locker); }catch{ showLocker(null); }
@@ -553,7 +928,7 @@ function showCamError(e){
   setCamStatus("err","erreur");
 }
 
-/* iOS/Android exigent un “geste utilisateur” → warm-up court */
+/* Warm-up (tap user) */
 async function warmUpPermission(){
   const gum = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:"environment" }, width:{ideal:1280}, height:{ideal:720} },
@@ -562,7 +937,7 @@ async function warmUpPermission(){
   gum.getTracks().forEach(t=>t.stop());
 }
 
-/* Démarre la caméra + choisit un décodeur (natif ou jsQR) */
+/* Start camera + decoder (conversion via handleDecodedText→onScan) */
 async function startCamera(){
   try{
     setCamStatus("warn","permission…");
@@ -576,7 +951,6 @@ async function startCamera(){
     video.srcObject = stream;
     await video.play();
 
-    // 1) Décodeur natif
     if ("BarcodeDetector" in window){
       const formats = await (window.BarcodeDetector.getSupportedFormats?.()||[]);
       if (!formats.length || formats.includes("qr_code")){
@@ -585,14 +959,11 @@ async function startCamera(){
         return;
       }
     }
-
-    // 2) Fallback jsQR (canvas)
     if (window.jsQR){
       stopDecoder = startJsQRLoop(video);
       cameraRunning = true; setCamStatus("ok","opérationnelle (jsQR)");
       return;
     }
-
     throw new Error("Aucun décodeur dispo (BarcodeDetector/jsQR).");
   }catch(e){
     cameraRunning = false;
@@ -609,7 +980,6 @@ async function stopCamera(){
   setCamStatus("warn","arrêtée");
 }
 
-/* Décodeur natif */
 function startBarcodeDetectorLoop(videoEl){
   const detector = new window.BarcodeDetector({ formats:["qr_code"] });
   let stopped=false;
@@ -632,7 +1002,6 @@ function startBarcodeDetectorLoop(videoEl){
   return ()=>{ stopped=true; };
 }
 
-/* jsQR fallback */
 function startJsQRLoop(videoEl){
   const cvs=document.createElement("canvas");
   const ctx=cvs.getContext("2d",{willReadFrequently:true});
@@ -657,24 +1026,25 @@ function startJsQRLoop(videoEl){
   return ()=>{ stopped=true; };
 }
 
-/* Routing du texte décodé */
 async function handleDecodedText(text){
-  const token = (text||"").trim();
-  if (!token) return;
+  // Conversion appliquée ici pour les scans caméra (Admin + Kiosk)
+  fmt = loadFmt();
+  const converted = convertRFID(text || "");
+  if (!converted) return;
   if (scanTargetInput){
-    scanTargetInput.value = token; // remplit l'UID ciblé
+    scanTargetInput.value = converted; // injecte la valeur convertie dans le champ UID ciblé
     return;
   }
-  if (typeof onScan === "function"){
-    onScan(token); // mode kiosk
-  }
+  if (typeof onScan === "function"){ onScan(converted); } // Kiosk
 }
 
-/* Boutons caméra */
+/* Buttons */
+const fabCamera = document.getElementById("fab-camera");
 fabCamera.onclick = async ()=>{ if (cameraRunning) await stopCamera(); else await startCamera(); };
+const camRestartBtn = document.getElementById("cam-restart");
 camRestartBtn?.addEventListener("click", ()=>{ if(cameraRunning) stopCamera().then(startCamera); else startCamera(); });
 
-/* Reprise après retour d’arrière-plan (PWA A2HS) */
+/* Resume after background */
 document.addEventListener("visibilitychange", ()=>{
   if (document.visibilityState === "visible" && cameraRunning){
     stopCamera().then(startCamera).catch(()=>{});
