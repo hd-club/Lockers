@@ -1,0 +1,51 @@
+/* Login Styles */
+.login-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 20px;
+}
+
+.login-section .card {
+  max-width: 400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.login-section h2 {
+  text-align: center;
+  margin-bottom: 8px;
+  color: var(--primary);
+}
+
+.login-section .note {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.login-section button[type="submit"] {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.login-section a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.login-section a:hover {
+  text-decoration: underline;
+}
